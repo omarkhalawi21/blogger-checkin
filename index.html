@@ -52,19 +52,19 @@
   <main class="card" id="form">
     <img src="logo.png" alt="Hassad Coffee Roasters" style="width:96px;height:96px;object-fit:contain;display:block;margin:0 auto 10px" onerror="this.style.display='none'" />
     <div class="badge" id="brand" style="text-align:center">Hassad Coffee Roasters</div>
-    <h1 style="text-align:center">Welcome 👋</h1>
-    <p class="sub">Sign in to start your tasting. Enter the name &amp; number you registered with.</p>
+    <h1 style="text-align:center">Welcome 👋<span style="display:block;font-size:21px;color:var(--muted);direction:rtl;margin-top:2px">أهلاً وسهلاً</span></h1>
+    <p class="sub" style="text-align:center">Enter the name &amp; number you registered with.<br><span dir="rtl">أدخل الاسم والرقم المُسجَّل به.</span></p>
 
     <div class="field">
-      <label for="name">Your name</label>
-      <input id="name" type="text" autocomplete="name" placeholder="e.g. Sara" />
+      <label for="name">Your name <span style="float:inline-end;color:#a99f95" dir="rtl">الاسم</span></label>
+      <input id="name" type="text" autocomplete="name" placeholder="e.g. Sara · سارة" />
     </div>
     <div class="field">
-      <label for="phone">Phone number</label>
+      <label for="phone">Phone number <span style="float:inline-end;color:#a99f95" dir="rtl">رقم الجوال</span></label>
       <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="05X XXX XXXX" />
     </div>
 
-    <button id="go" onclick="checkin()"><span id="golabel">Check in</span></button>
+    <button id="go" onclick="checkin()"><span id="golabel">Check in · تسجيل الدخول</span></button>
     <div class="msg" id="msg"></div>
     <div class="foot" id="foot"></div>
   </main>
@@ -72,8 +72,8 @@
   <section class="over" id="ok">
     <div class="tick"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
     <h2 id="okTitle">You're in!</h2>
-    <p>Enjoy the coffee and the tasting — we're glad to have you. 🎬☕</p>
-    <button onclick="reset()">Done</button>
+    <p>Enjoy the coffee and the tasting — we're glad to have you. 🎬☕<br><span dir="rtl">استمتع بالقهوة والتذوّق — سعداء بوجودك معنا.</span></p>
+    <button onclick="reset()">Done · تم</button>
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -88,7 +88,7 @@
     const $ = id => document.getElementById(id);
     function setBusy(b){
       $('go').disabled = b;
-      $('golabel').innerHTML = b ? '<span class="spin"></span>' : 'Check in';
+      $('golabel').innerHTML = b ? '<span class="spin"></span>' : 'Check in · تسجيل الدخول';
     }
     function err(t){ const m=$('msg'); m.className='msg err'; m.textContent=t; }
     function clearMsg(){ const m=$('msg'); m.className='msg'; m.textContent=''; }
@@ -97,22 +97,22 @@
       clearMsg();
       const name = $('name').value.trim();
       const phone = $('phone').value.trim();
-      if (!phone){ err('Please enter your phone number.'); $('phone').focus(); return; }
+      if (!phone){ err('Please enter your phone number · أدخل رقم جوالك'); $('phone').focus(); return; }
       if (!sb){ err('This page isn’t configured yet.'); return; }
       setBusy(true);
       try {
         const { data, error } = await sb.rpc('blogger_checkin', { p_phone: phone, p_name: name });
         if (error) throw error;
         if (data && data.ok){
-          $('okTitle').textContent = data.name ? ('You’re in, ' + data.name + '!') : 'You’re in!';
+          $('okTitle').textContent = data.name ? ('You’re in, ' + data.name + '! · تم تسجيلك') : 'You’re in! · تم تسجيلك';
           $('ok').classList.add('show');
         } else if (data && data.reason === 'not_registered'){
-          err('That number isn’t on our list yet — please see a team member.');
+          err('That number isn’t on our list yet — please see a team member · رقمك غير مُسجَّل، الرجاء مراجعة أحد الموظفين');
         } else {
-          err('That doesn’t look like a valid number. Try again.');
+          err('That doesn’t look like a valid number — try again · رقم غير صحيح، حاول مرة أخرى');
         }
       } catch(e){
-        err('Something went wrong. Please try again.');
+        err('Something went wrong — please try again · حدث خطأ، حاول مرة أخرى');
         console.error(e);
       } finally { setBusy(false); }
     }
