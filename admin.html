@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Blogger Check-in · Admin</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗂️</text></svg>" />
+  <style>
+    :root{ --bg:#f6f4f1; --card:#fff; --ink:#26201d; --muted:#8a807a; --brand:#b02a2a; --ring:#e7e1da; --ok:#1f9d63; }
+    *{ box-sizing:border-box; }
+    body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+    .wrap{ max-width:960px; margin:0 auto; padding:24px 18px 60px; }
+    h1{ font-size:24px; margin:0; letter-spacing:-.02em; }
+    h2{ font-size:15px; text-transform:uppercase; letter-spacing:.08em; color:#6b625c; margin:0 0 12px; }
+    .card{ background:var(--card); border:1px solid var(--ring); border-radius:18px; padding:20px; margin-bottom:18px; box-shadow:0 12px 30px -22px rgba(60,40,20,.4); }
+    label{ display:block; font-size:12px; font-weight:700; color:#6b625c; text-transform:uppercase; letter-spacing:.05em; margin:0 0 6px; }
+    input,textarea{ width:100%; font-size:15px; padding:11px 12px; border:1.5px solid var(--ring); border-radius:11px; background:#fdfcfa; color:var(--ink); outline:none; font-family:inherit; }
+    input:focus,textarea:focus{ border-color:var(--brand); }
+    textarea{ min-height:120px; resize:vertical; }
+    button{ font-size:14px; font-weight:700; color:#fff; background:var(--brand); border:none; border-radius:11px; padding:11px 16px; cursor:pointer; }
+    button.ghost{ background:#fff; color:var(--ink); border:1.5px solid var(--ring); }
+    button.sm{ padding:6px 10px; font-size:12px; }
+    button:disabled{ opacity:.55; cursor:default; }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .between{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    table{ width:100%; border-collapse:collapse; font-size:14px; }
+    th{ text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#9a908a; padding:8px 10px; border-bottom:1px solid var(--ring); }
+    td{ padding:9px 10px; border-bottom:1px solid #f1ece6; }
+    .mono{ font-variant-numeric:tabular-nums; }
+    .muted{ color:var(--muted); }
+    .pill{ display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; }
+    .pill.on{ background:#e7f6ee; color:var(--ok); } .pill.off{ background:#f1ece6; color:#9a908a; }
+    .stat{ font-size:30px; font-weight:800; letter-spacing:-.02em; }
+    .grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+    .note{ font-size:12px; color:var(--muted); margin-top:8px; line-height:1.5; }
+    .hide{ display:none; }
+    .toast{ position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#26201d; color:#fff; padding:11px 18px; border-radius:12px; font-size:14px; opacity:0; transition:opacity .2s; pointer-events:none; }
+    .toast.show{ opacity:1; }
+    a.tab{ font-size:14px; font-weight:700; color:var(--muted); text-decoration:none; padding:8px 4px; border-bottom:2px solid transparent; cursor:pointer; }
+    a.tab.active{ color:var(--brand); border-color:var(--brand); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="between" style="margin-bottom:18px">
+      <h1>Blogger Check-in · Admin</h1>
+      <button class="ghost sm hide" id="signout" onclick="signOut()">Sign out</button>
+    </div>
+
+    <!-- LOGIN -->
+    <div class="card" id="login" style="max-width:400px">
+      <h2>Sign in</h2>
+      <div style="margin-bottom:12px"><label>Email</label><input id="email" type="email" autocomplete="username" /></div>
+      <div style="margin-bottom:14px"><label>Password</label><input id="pw" type="password" autocomplete="current-password" /></div>
+      <button id="loginBtn" onclick="signIn()">Sign in</button>
+      <div class="note" id="loginMsg"></div>
+    </div>
+
+    <!-- CONSOLE -->
+    <div id="console" class="hide">
+      <div class="row" style="margin-bottom:16px">
+        <a class="tab active" id="tab-list" onclick="showTab('list')">Registered numbers</a>
+        <a class="tab" id="tab-checkins" onclick="showTab('checkins')">Check-ins</a>
+      </div>
+
+      <!-- LIST TAB -->
+      <div id="pane-list">
+        <div class="card">
+          <h2>Add numbers</h2>
+          <label>Paste one per line — <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">"05XXXXXXXX" or "05XXXXXXXX, Sara" (name optional)</span></label>
+          <textarea id="paste" placeholder="0551234567, Sara Al-...&#10;0509876543, Mohammed&#10;0561112223"></textarea>
+          <div class="row" style="margin-top:12px">
+            <button id="addBtn" onclick="addNumbers()">Add to list</button>
+            <label class="ghost" style="display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:700;text-transform:none;letter-spacing:0;color:var(--ink);border:1.5px solid var(--ring);border-radius:11px;padding:10px 16px;cursor:pointer;margin:0">
+              Upload CSV<input type="file" accept=".csv,text/csv" class="hide" onchange="importCsv(this)">
+            </label>
+          </div>
+          <div class="note">Numbers are normalised (last 9 digits) so any format matches. Duplicates are ignored.</div>
+        </div>
+        <div class="card">
+          <div class="between" style="margin-bottom:12px">
+            <h2 style="margin:0">Registered · <span id="listCount">0</span></h2>
+            <input id="listSearch" placeholder="Search name / number" style="max-width:240px" oninput="renderList()">
+          </div>
+          <div style="overflow-x:auto">
+            <table><thead><tr><th>Name</th><th>Phone</th><th>Status</th><th></th></tr></thead>
+              <tbody id="listBody"></tbody></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- CHECK-INS TAB -->
+      <div id="pane-checkins" class="hide">
+        <div class="card">
+          <div class="grid">
+            <div><div class="stat" id="cTotal">0</div><div class="muted" style="font-size:12px">Total check-ins</div></div>
+            <div><div class="stat" id="cToday">0</div><div class="muted" style="font-size:12px">Today</div></div>
+            <div><div class="stat" id="cUnique">0</div><div class="muted" style="font-size:12px">Unique bloggers</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="between" style="margin-bottom:12px">
+            <h2 style="margin:0">Check-in log</h2>
+            <button class="ghost sm" onclick="exportCsv()">Export CSV</button>
+          </div>
+          <div style="overflow-x:auto">
+            <table><thead><tr><th>When</th><th>Name</th><th>Phone</th></tr></thead>
+              <tbody id="ciBody"></tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script>
+    const CFG = window.BLOGGER_CFG || {};
+    const configured = CFG.SUPABASE_URL && !CFG.SUPABASE_URL.includes('YOUR-PROJECT');
+    const sb = configured ? supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
+    const $ = id => document.getElementById(id);
+    let _list = [], _checkins = [];
+
+    function toast(t){ const el=$('toast'); el.textContent=t; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),1800); }
+    function normPhone(p){ return (p||'').replace(/\D/g,'').slice(-9); }
+
+    async function boot(){
+      if (!configured){ $('loginMsg').textContent='Fill in config.js first.'; return; }
+      const { data } = await sb.auth.getSession();
+      if (data.session) enter();
+    }
+    async function signIn(){
+      $('loginMsg').textContent=''; $('loginBtn').disabled=true;
+      const { error } = await sb.auth.signInWithPassword({ email:$('email').value.trim(), password:$('pw').value });
+      $('loginBtn').disabled=false;
+      if (error){ $('loginMsg').textContent = error.message; return; }
+      enter();
+    }
+    async function signOut(){ await sb.auth.signOut(); location.reload(); }
+    function enter(){ $('login').classList.add('hide'); $('console').classList.remove('hide'); $('signout').classList.remove('hide'); loadAll(); }
+
+    async function loadAll(){ await Promise.all([loadList(), loadCheckins()]); }
+
+    async function loadList(){
+      const { data, error } = await sb.from('blogger_allowlist').select('*').order('created_at',{ascending:false});
+      if (error){ toast('Load failed'); return; }
+      _list = data||[]; renderList();
+    }
+    function renderList(){
+      const q = ($('listSearch').value||'').toLowerCase();
+      const rows = _list.filter(r => !q || (r.name||'').toLowerCase().includes(q) || (r.phone||'').includes(q.replace(/\D/g,'')));
+      $('listCount').textContent = _list.length;
+      $('listBody').innerHTML = rows.length ? rows.map(r=>`
+        <tr>
+          <td>${esc(r.name)||'<span class="muted">—</span>'}</td>
+          <td class="mono">${esc(r.phone)}</td>
+          <td><span class="pill ${r.active?'on':'off'}">${r.active?'Active':'Off'}</span></td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="ghost sm" onclick="toggleActive('${r.id}',${r.active})">${r.active?'Disable':'Enable'}</button>
+            <button class="ghost sm" onclick="removeRow('${r.id}')">Delete</button>
+          </td>
+        </tr>`).join('') : `<tr><td colspan="4" class="muted" style="text-align:center;padding:22px">No numbers yet.</td></tr>`;
+    }
+    function parseLines(text){
+      const out=[]; (text||'').split(/\r?\n/).forEach(line=>{
+        const parts=line.split(/[,\t;]/); const phone=normPhone(parts[0]);
+        if (phone.length>=6) out.push({ phone, name:(parts[1]||'').trim()||null });
+      });
+      // de-dupe within the batch
+      const seen=new Set(); return out.filter(r=> seen.has(r.phone)?false:(seen.add(r.phone),true));
+    }
+    async function addRows(rows){
+      if (!rows.length){ toast('No valid numbers found'); return; }
+      const { error } = await sb.from('blogger_allowlist').upsert(rows, { onConflict:'phone', ignoreDuplicates:false });
+      if (error){ toast(error.message); return; }
+      toast(`Added ${rows.length} number${rows.length===1?'':'s'}`); $('paste').value=''; loadList();
+    }
+    function addNumbers(){ addRows(parseLines($('paste').value)); }
+    function importCsv(input){ const f=input.files[0]; if(!f) return; const rd=new FileReader();
+      rd.onload=()=>{ addRows(parseLines(String(rd.result))); input.value=''; }; rd.readAsText(f); }
+    async function toggleActive(id,cur){ await sb.from('blogger_allowlist').update({active:!cur}).eq('id',id); loadList(); }
+    async function removeRow(id){ if(!confirm('Delete this number?')) return; await sb.from('blogger_allowlist').delete().eq('id',id); loadList(); }
+
+    async function loadCheckins(){
+      const { data, error } = await sb.from('blogger_checkins').select('*').order('created_at',{ascending:false}).limit(2000);
+      if (error){ return; }
+      _checkins = data||[];
+      const today = new Date().toISOString().slice(0,10);
+      $('cTotal').textContent = _checkins.length;
+      $('cToday').textContent = _checkins.filter(c=>(c.created_at||'').slice(0,10)===today).length;
+      $('cUnique').textContent = new Set(_checkins.map(c=>c.phone)).size;
+      $('ciBody').innerHTML = _checkins.length ? _checkins.map(c=>`
+        <tr><td class="muted mono">${fmt(c.created_at)}</td><td>${esc(c.name)||'<span class="muted">—</span>'}</td><td class="mono">${esc(c.phone)}</td></tr>
+      `).join('') : `<tr><td colspan="3" class="muted" style="text-align:center;padding:22px">No check-ins yet.</td></tr>`;
+    }
+    function exportCsv(){
+      const head=['Date','Time','Name','Phone'];
+      const rows=_checkins.map(c=>{ const d=new Date(c.created_at); return [d.toLocaleDateString(), d.toLocaleTimeString(), c.name||'', c.phone||'']; });
+      const csv=[head,...rows].map(r=>r.map(v=>/[",\n]/.test(v)?`"${String(v).replace(/"/g,'""')}"`:v).join(',')).join('\n');
+      const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+      const a=document.createElement('a'); a.href=url; a.download='blogger-checkins.csv'; a.click(); URL.revokeObjectURL(url);
+    }
+    function showTab(t){ ['list','checkins'].forEach(x=>{ $('pane-'+x).classList.toggle('hide',x!==t); $('tab-'+x).classList.toggle('active',x===t); }); }
+    function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function fmt(iso){ const d=new Date(iso); return d.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' · '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}); }
+    $('pw').addEventListener('keydown', e=>{ if(e.key==='Enter') signIn(); });
+    boot();
+  </script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Welcome · Check in</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕</text></svg>" />
+  <style>
+    :root{ --bg:#faf7f2; --card:#ffffff; --ink:#2a2320; --muted:#8a807a; --brand:#b02a2a; --brand-d:#8f2020; --ring:#e7ddd2; --ok:#1f9d63; }
+    *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html,body{ margin:0; }
+    body{ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:
+      radial-gradient(1200px 600px at 50% -10%, #fff 0%, var(--bg) 60%); color:var(--ink);
+      min-height:100dvh; display:flex; align-items:center; justify-content:center; padding:24px 18px; }
+    .card{ width:100%; max-width:440px; background:var(--card); border:1px solid var(--ring);
+      border-radius:24px; padding:30px 24px 26px; box-shadow:0 20px 50px -24px rgba(60,40,20,.35); }
+    .badge{ font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--brand); font-weight:800; }
+    h1{ font-size:26px; margin:6px 0 4px; line-height:1.15; letter-spacing:-.02em; }
+    .sub{ color:var(--muted); font-size:14px; margin:0 0 22px; line-height:1.5; }
+    label{ display:block; font-size:12px; font-weight:700; color:#6b625c; text-transform:uppercase; letter-spacing:.06em; margin:0 0 6px; }
+    .field{ margin-bottom:16px; }
+    input{ width:100%; font-size:17px; padding:14px 15px; border:1.5px solid var(--ring); border-radius:14px;
+      background:#fdfbf8; color:var(--ink); outline:none; transition:border-color .15s, box-shadow .15s; }
+    input:focus{ border-color:var(--brand); box-shadow:0 0 0 4px rgba(176,42,42,.10); }
+    button{ width:100%; font-size:17px; font-weight:700; color:#fff; background:var(--brand);
+      border:none; border-radius:14px; padding:15px; cursor:pointer; transition:background .15s, transform .05s;
+      display:flex; align-items:center; justify-content:center; gap:8px; }
+    button:hover{ background:var(--brand-d); }
+    button:active{ transform:translateY(1px); }
+    button:disabled{ opacity:.6; cursor:default; }
+    .msg{ margin-top:14px; font-size:14px; text-align:center; min-height:20px; }
+    .msg.err{ color:var(--brand-d); font-weight:600; }
+    .foot{ text-align:center; color:#b3a99f; font-size:11px; margin-top:20px; }
+    .spin{ width:18px; height:18px; border:2.5px solid rgba(255,255,255,.4); border-top-color:#fff; border-radius:50%; animation:sp .7s linear infinite; }
+    @keyframes sp{ to{ transform:rotate(360deg); } }
+    /* success overlay */
+    .over{ position:fixed; inset:0; background:linear-gradient(160deg,#fff,#faf3ea); display:none;
+      flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:32px; z-index:10;
+      animation:fade .25s ease; }
+    .over.show{ display:flex; }
+    @keyframes fade{ from{ opacity:0 } to{ opacity:1 } }
+    .tick{ width:104px; height:104px; border-radius:50%; background:rgba(31,157,99,.12); display:flex; align-items:center; justify-content:center; margin-bottom:22px; animation:pop .4s cubic-bezier(.2,1.3,.5,1); }
+    .tick svg{ width:56px; height:56px; stroke:var(--ok); }
+    @keyframes pop{ 0%{ transform:scale(.4); opacity:0 } 100%{ transform:scale(1); opacity:1 } }
+    .over h2{ font-size:30px; margin:0 0 6px; letter-spacing:-.02em; }
+    .over p{ color:var(--muted); font-size:16px; margin:0 0 26px; max-width:320px; line-height:1.5; }
+    .over button{ max-width:260px; background:#2a2320; }
+    .over button:hover{ background:#000; }
+  </style>
+</head>
+<body>
+  <main class="card" id="form">
+    <div class="badge" id="brand">Hassad Coffee Roasters</div>
+    <h1>Welcome 👋</h1>
+    <p class="sub">Sign in to start your tasting. Enter the name &amp; number you registered with.</p>
+
+    <div class="field">
+      <label for="name">Your name</label>
+      <input id="name" type="text" autocomplete="name" placeholder="e.g. Sara" />
+    </div>
+    <div class="field">
+      <label for="phone">Phone number</label>
+      <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="05X XXX XXXX" />
+    </div>
+
+    <button id="go" onclick="checkin()"><span id="golabel">Check in</span></button>
+    <div class="msg" id="msg"></div>
+    <div class="foot" id="foot"></div>
+  </main>
+
+  <section class="over" id="ok">
+    <div class="tick"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+    <h2 id="okTitle">You're in!</h2>
+    <p>Enjoy the coffee and the tasting — we're glad to have you. 🎬☕</p>
+    <button onclick="reset()">Done</button>
+  </section>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script>
+    const CFG = window.BLOGGER_CFG || {};
+    document.getElementById('brand').textContent = CFG.BRAND_NAME || 'Check in';
+    const configured = CFG.SUPABASE_URL && !CFG.SUPABASE_URL.includes('YOUR-PROJECT');
+    const sb = configured ? supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
+    if (!configured) document.getElementById('foot').textContent = 'Setup needed: fill in config.js';
+
+    const $ = id => document.getElementById(id);
+    function setBusy(b){
+      $('go').disabled = b;
+      $('golabel').innerHTML = b ? '<span class="spin"></span>' : 'Check in';
+    }
+    function err(t){ const m=$('msg'); m.className='msg err'; m.textContent=t; }
+    function clearMsg(){ const m=$('msg'); m.className='msg'; m.textContent=''; }
+
+    async function checkin(){
+      clearMsg();
+      const name = $('name').value.trim();
+      const phone = $('phone').value.trim();
+      if (!phone){ err('Please enter your phone number.'); $('phone').focus(); return; }
+      if (!sb){ err('This page isn’t configured yet.'); return; }
+      setBusy(true);
+      try {
+        const { data, error } = await sb.rpc('blogger_checkin', { p_phone: phone, p_name: name });
+        if (error) throw error;
+        if (data && data.ok){
+          $('okTitle').textContent = data.name ? ('You’re in, ' + data.name + '!') : 'You’re in!';
+          $('ok').classList.add('show');
+        } else if (data && data.reason === 'not_registered'){
+          err('That number isn’t on our list yet — please see a team member.');
+        } else {
+          err('That doesn’t look like a valid number. Try again.');
+        }
+      } catch(e){
+        err('Something went wrong. Please try again.');
+        console.error(e);
+      } finally { setBusy(false); }
+    }
+    function reset(){
+      $('ok').classList.remove('show');
+      $('name').value=''; $('phone').value=''; clearMsg(); $('name').focus();
+    }
+    $('phone').addEventListener('keydown', e=>{ if(e.key==='Enter') checkin(); });
+  </script>
+</body>
+</html>
