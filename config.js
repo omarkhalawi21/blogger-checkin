@@ -5,7 +5,7 @@
 // The anon key is safe to ship publicly *because* the tables have RLS and the
 // public page can only call the blogger_checkin() function.
 window.BLOGGER_CFG = {
-  SUPABASE_URL: 'https://YOUR-PROJECT.supabase.co',
-  SUPABASE_ANON_KEY: 'YOUR-ANON-PUBLISHABLE-KEY',
+  SUPABASE_URL: 'https://eifnvqhjzwokswnyaahj.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_09Cd64emRvI1OcXb0OEv1A_6KVCeRA7',
   BRAND_NAME: 'Hassad Coffee Roasters',
 };
