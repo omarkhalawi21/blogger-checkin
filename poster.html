@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Scan to check in · poster</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    *{ box-sizing:border-box; }
+    html,body{ margin:0; }
+    body{ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:#2a2320;
+      background:#faf7f2; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .sheet{ width:210mm; min-height:297mm; margin:0 auto; padding:26mm 20mm; display:flex; flex-direction:column;
+      align-items:center; text-align:center; background:radial-gradient(900px 500px at 50% 0%, #fff 0%, #faf7f2 65%); }
+    .brand{ font-size:13px; letter-spacing:.28em; text-transform:uppercase; color:#b02a2a; font-weight:800; }
+    h1{ font-size:52px; margin:14px 0 6px; letter-spacing:-.02em; }
+    .ar{ font-size:30px; color:#6b625c; margin:0 0 4px; direction:rtl; }
+    .sub{ font-size:19px; color:#6b625c; margin:2px 0 30px; }
+    .qrbox{ background:#fff; border:2px solid #eadfd2; border-radius:28px; padding:26px; box-shadow:0 24px 60px -30px rgba(60,40,20,.35); }
+    .qrbox img{ width:118mm; height:118mm; display:block; }
+    .steps{ margin-top:34px; font-size:20px; color:#3a322d; line-height:2; }
+    .steps b{ color:#b02a2a; }
+    .foot{ margin-top:auto; font-size:14px; color:#a99f95; padding-top:24px; }
+    .print-btn{ position:fixed; top:14px; right:14px; background:#b02a2a; color:#fff; border:none;
+      border-radius:12px; padding:11px 18px; font-size:15px; font-weight:700; cursor:pointer; }
+    @media print { .print-btn{ display:none; } body{ background:#fff; } }
+  </style>
+</head>
+<body>
+  <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+  <div class="sheet">
+    <div class="brand">Hassad Coffee Roasters</div>
+    <h1>Scan to check in</h1>
+    <div class="ar">امسح للتسجيل</div>
+    <div class="sub">Point your camera here to start your tasting</div>
+    <div class="qrbox"><img src="checkin-qr.png" alt="Check-in QR code" /></div>
+    <div class="steps">
+      <div>1 · Open your <b>camera</b> and point it at the code</div>
+      <div>2 · Tap the link that appears</div>
+      <div>3 · Enter your <b>name &amp; phone</b> → enjoy! ☕🎬</div>
+    </div>
+    <div class="foot">Trouble scanning? Ask a team member.</div>
+  </div>
+</body>
+</html>
