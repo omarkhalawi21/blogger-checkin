@@ -55,6 +55,12 @@ begin
   if not found then
     return jsonb_build_object('ok', false, 'reason', 'not_registered');
   end if;
+  -- One check-in per blogger: if this number has already checked in, don't
+  -- record another — tell them they're already in.
+  if exists (select 1 from public.blogger_checkins where phone = v_norm) then
+    return jsonb_build_object('ok', false, 'reason', 'already',
+      'name', v_row.name);
+  end if;
   insert into public.blogger_checkins(phone, name, allowlist_id)
     values (v_norm, coalesce(nullif(trim(p_name), ''), v_row.name), v_row.id);
   return jsonb_build_object('ok', true, 'name', coalesce(v_row.name, nullif(trim(p_name), '')));

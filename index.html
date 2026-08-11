@@ -106,6 +106,9 @@
         if (data && data.ok){
           $('okTitle').textContent = data.name ? ('You’re in, ' + data.name + '! · تم تسجيلك') : 'You’re in! · تم تسجيلك';
           $('ok').classList.add('show');
+        } else if (data && data.reason === 'already'){
+          const who = data.name ? (', ' + data.name) : '';
+          err('You’ve already checked in' + who + ' — one visit per guest · تم تسجيلك مسبقًا، تسجيل واحد لكل ضيف');
         } else if (data && data.reason === 'not_registered'){
           err('That number isn’t on our list yet — please see a team member · رقمك غير مُسجَّل، الرجاء مراجعة أحد الموظفين');
         } else {
