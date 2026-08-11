@@ -67,8 +67,8 @@
       <div id="pane-list">
         <div class="card">
           <h2>Add numbers</h2>
-          <label>Paste one per line — <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">"05XXXXXXXX" or "05XXXXXXXX, Sara" (name optional)</span></label>
-          <textarea id="paste" placeholder="0551234567, Sara Al-...&#10;0509876543, Mohammed&#10;0561112223"></textarea>
+          <label>Paste one per line — <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400">"05XXXXXXXX" or "05XXXXXXXX, @handle" (username optional)</span></label>
+          <textarea id="paste" placeholder="0551234567, @sara&#10;0509876543, @mohammed&#10;0561112223"></textarea>
           <div class="row" style="margin-top:12px">
             <button id="addBtn" onclick="addNumbers()">Add to list</button>
             <label class="ghost" style="display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:700;text-transform:none;letter-spacing:0;color:var(--ink);border:1.5px solid var(--ring);border-radius:11px;padding:10px 16px;cursor:pointer;margin:0">
@@ -80,10 +80,10 @@
         <div class="card">
           <div class="between" style="margin-bottom:12px">
             <h2 style="margin:0">Registered · <span id="listCount">0</span></h2>
-            <input id="listSearch" placeholder="Search name / number" style="max-width:240px" oninput="renderList()">
+            <input id="listSearch" placeholder="Search username / number" style="max-width:240px" oninput="renderList()">
           </div>
           <div style="overflow-x:auto">
-            <table><thead><tr><th>Name</th><th>Phone</th><th>Status</th><th></th></tr></thead>
+            <table><thead><tr><th>Username</th><th>Phone</th><th>Status</th><th></th></tr></thead>
               <tbody id="listBody"></tbody></table>
           </div>
         </div>
@@ -104,7 +104,7 @@
             <button class="ghost sm" onclick="exportCsv()">Export CSV</button>
           </div>
           <div style="overflow-x:auto">
-            <table><thead><tr><th>When</th><th>Name</th><th>Phone</th></tr></thead>
+            <table><thead><tr><th>When</th><th>Username</th><th>Phone</th></tr></thead>
               <tbody id="ciBody"></tbody></table>
           </div>
         </div>
@@ -195,7 +195,7 @@
       `).join('') : `<tr><td colspan="3" class="muted" style="text-align:center;padding:22px">No check-ins yet.</td></tr>`;
     }
     function exportCsv(){
-      const head=['Date','Time','Name','Phone'];
+      const head=['Date','Time','Username','Phone'];
       const rows=_checkins.map(c=>{ const d=new Date(c.created_at); return [d.toLocaleDateString(), d.toLocaleTimeString(), c.name||'', c.phone||'']; });
       const csv=[head,...rows].map(r=>r.map(v=>/[",\n]/.test(v)?`"${String(v).replace(/"/g,'""')}"`:v).join(',')).join('\n');
       const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
