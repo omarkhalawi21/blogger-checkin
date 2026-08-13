@@ -163,9 +163,21 @@
         </tr>`).join('') : `<tr><td colspan="4" class="muted" style="text-align:center;padding:22px">No numbers yet.</td></tr>`;
     }
     function parseLines(text){
+      // Column-order agnostic: on each line, whichever part has >=7 digits is
+      // the phone (handles "phone,name", "name,phone", "@handle,05x xxx xxxx",
+      // etc.); the remaining parts become the username. Header rows have no
+      // phone-like part, so they're skipped automatically.
       const out=[]; (text||'').split(/\r?\n/).forEach(line=>{
-        const parts=line.split(/[,\t;]/); const phone=normPhone(parts[0]);
-        if (phone.length>=6) out.push({ phone, name:(parts[1]||'').trim()||null });
+        const parts=line.split(/[,\t;]/).map(p=>p.trim()).filter(Boolean);
+        if (!parts.length) return;
+        let phoneIdx=-1, best=0;
+        parts.forEach((p,i)=>{ const d=(p.replace(/\D/g,'')||'').length;
+          if (d>=7 && d>best){ best=d; phoneIdx=i; } });
+        if (phoneIdx<0) return;
+        const phone=normPhone(parts[phoneIdx]);
+        if (phone.length<6) return;
+        const name=parts.filter((_,i)=>i!==phoneIdx).join(' ').trim()||null;
+        out.push({ phone, name });
       });
       // de-dupe within the batch
       const seen=new Set(); return out.filter(r=> seen.has(r.phone)?false:(seen.add(r.phone),true));
