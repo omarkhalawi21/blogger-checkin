@@ -28,6 +28,10 @@ create table if not exists public.blogger_checkins (
 );
 create index if not exists blogger_checkins_created_idx on public.blogger_checkins(created_at desc);
 
+-- Which branch the poster that was scanned belongs to (from the QR's ?branch=).
+alter table public.blogger_checkins add column if not exists branch text;
+create index if not exists blogger_checkins_branch_idx on public.blogger_checkins(branch);
+
 -- 3. Phone normaliser: strip non-digits, keep the last 9 (so "0551234567",
 --    "+966551234567" and "551234567" all match the same blogger).
 create or replace function public.norm_phone(p text)
@@ -38,15 +42,21 @@ $$;
 -- 4. The ONLY thing the public page can call. Runs as the owner (security
 --    definer), checks the list, records the visit, and returns just a
 --    yes/no + the name — the number list itself is never exposed.
-create or replace function public.blogger_checkin(p_phone text, p_name text)
+-- The old 2-arg version must be dropped (not replaced) so PostgREST doesn't
+-- see two overloads and refuse the call. The 3-arg version defaults
+-- p_branch to null, so older cached pages that send only 2 args still work.
+drop function if exists public.blogger_checkin(text, text);
+
+create or replace function public.blogger_checkin(p_phone text, p_name text, p_branch text default null)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
 as $$
-declare v_row public.blogger_allowlist; v_norm text;
+declare v_row public.blogger_allowlist; v_norm text; v_branch text;
 begin
   v_norm := public.norm_phone(p_phone);
+  v_branch := nullif(upper(left(trim(coalesce(p_branch, '')), 40)), '');
   if length(v_norm) < 6 then
     return jsonb_build_object('ok', false, 'reason', 'invalid');
   end if;
@@ -61,8 +71,8 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'already',
       'name', v_row.name);
   end if;
-  insert into public.blogger_checkins(phone, name, allowlist_id)
-    values (v_norm, coalesce(nullif(trim(p_name), ''), v_row.name), v_row.id);
+  insert into public.blogger_checkins(phone, name, allowlist_id, branch)
+    values (v_norm, coalesce(nullif(trim(p_name), ''), v_row.name), v_row.id, v_branch);
   return jsonb_build_object('ok', true, 'name', coalesce(v_row.name, nullif(trim(p_name), '')));
 end $$;
 
@@ -86,8 +96,8 @@ create policy checkins_admin on public.blogger_checkins
   for all to authenticated using (true) with check (true);
 
 -- anon can execute the check-in function, nothing else.
-grant execute on function public.blogger_checkin(text, text) to anon, authenticated;
-grant execute on function public.norm_phone(text)             to anon, authenticated;
+grant execute on function public.blogger_checkin(text, text, text) to anon, authenticated;
+grant execute on function public.norm_phone(text)                   to anon, authenticated;
 
 -- ============================================================================
 -- Diagnostic — should return true / true / true:

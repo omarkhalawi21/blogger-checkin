@@ -30,7 +30,7 @@
   <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
   <div class="sheet">
     <img src="logo.png" alt="Hassad Coffee Roasters" style="width:150px;height:150px;object-fit:contain;margin-bottom:6px" onerror="this.style.display='none'" />
-    <div class="brand">Hassad Coffee Roasters</div>
+    <div class="brand">Hassad Coffee Roasters<span id="branchTag" style="display:none"> · <span id="branchName"></span></span></div>
     <h1>Scan to check in</h1>
     <div class="ar">امسح للتسجيل</div>
     <div class="sub">Point your camera here to start your tasting<br><span dir="rtl">وجّه الكاميرا هنا لبدء التذوّق</span></div>
@@ -42,5 +42,22 @@
     </div>
     <div class="foot">Trouble scanning? Ask a team member. &middot; <span dir="rtl">مشكلة في المسح؟ اسأل أحد الموظفين</span></div>
   </div>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.4.4/build/qrcode.min.js"></script>
+  <script>
+    // Branch-specific poster: open poster.html?branch=khobar and the QR is
+    // regenerated to encode ?branch=khobar, so check-ins record the branch.
+    // Without ?branch= the static (branch-less) QR image is used as-is.
+    const b = (new URLSearchParams(location.search).get('branch') || '').trim().slice(0, 40);
+    if (b && window.QRCode){
+      const url = 'https://checkin.hasadco.sa/?branch=' + encodeURIComponent(b.toLowerCase());
+      QRCode.toDataURL(url, { width: 1200, margin: 2 }, (err, dataUrl) => {
+        if (err) return console.error(err);
+        document.querySelector('.qrbox img').src = dataUrl;
+        document.getElementById('branchName').textContent = b.toUpperCase();
+        document.getElementById('branchTag').style.display = 'inline';
+        document.title = 'Scan to check in · ' + b.toUpperCase();
+      });
+    }
+  </script>
 </body>
 </html>

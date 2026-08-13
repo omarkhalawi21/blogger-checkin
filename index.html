@@ -80,7 +80,14 @@
   <script src="config.js"></script>
   <script>
     const CFG = window.BLOGGER_CFG || {};
-    document.getElementById('brand').textContent = CFG.BRAND_NAME || 'Check in';
+    // Branch comes from the poster's QR (?branch=khobar). Each branch prints
+    // its own poster; the blogger never has to pick anything.
+    const BRANCH = (() => {
+      const b = (new URLSearchParams(location.search).get('branch') || '').trim().slice(0, 40);
+      return b ? b.toUpperCase() : null;
+    })();
+    document.getElementById('brand').textContent =
+      (CFG.BRAND_NAME || 'Check in') + (BRANCH ? ' · ' + BRANCH : '');
     const configured = CFG.SUPABASE_URL && !CFG.SUPABASE_URL.includes('YOUR-PROJECT');
     const sb = configured ? supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
     if (!configured) document.getElementById('foot').textContent = 'Setup needed: fill in config.js';
@@ -101,7 +108,12 @@
       if (!sb){ err('This page isn’t configured yet.'); return; }
       setBusy(true);
       try {
-        const { data, error } = await sb.rpc('blogger_checkin', { p_phone: phone, p_name: name });
+        let { data, error } = await sb.rpc('blogger_checkin', { p_phone: phone, p_name: name, p_branch: BRANCH });
+        if (error && error.code === 'PGRST202'){
+          // DB still has the 2-arg function (branch SQL not run yet) — check
+          // in without the branch rather than turning the guest away.
+          ({ data, error } = await sb.rpc('blogger_checkin', { p_phone: phone, p_name: name }));
+        }
         if (error) throw error;
         if (data && data.ok){
           $('okTitle').textContent = data.name ? ('You’re in, ' + data.name + '! · تم تسجيلك') : 'You’re in! · تم تسجيلك';

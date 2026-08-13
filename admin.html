@@ -101,10 +101,15 @@
         <div class="card">
           <div class="between" style="margin-bottom:12px">
             <h2 style="margin:0">Check-in log</h2>
-            <button class="ghost sm" onclick="exportCsv()">Export CSV</button>
+            <div class="row">
+              <select id="ciBranch" onchange="renderCheckins()" style="font-size:13px;padding:7px 10px;border:1.5px solid var(--ring);border-radius:11px;background:#fdfcfa;color:var(--ink)">
+                <option value="">All branches</option>
+              </select>
+              <button class="ghost sm" onclick="exportCsv()">Export CSV</button>
+            </div>
           </div>
           <div style="overflow-x:auto">
-            <table><thead><tr><th>When</th><th>Username</th><th>Phone</th></tr></thead>
+            <table><thead><tr><th>When</th><th>Username</th><th>Phone</th><th>Branch</th></tr></thead>
               <tbody id="ciBody"></tbody></table>
           </div>
         </div>
@@ -198,17 +203,29 @@
       const { data, error } = await sb.from('blogger_checkins').select('*').order('created_at',{ascending:false}).limit(2000);
       if (error){ return; }
       _checkins = data||[];
+      const sel=$('ciBranch'), cur=sel.value;
+      const branches=[...new Set(_checkins.map(c=>c.branch).filter(Boolean))].sort();
+      sel.innerHTML = '<option value="">All branches</option>' +
+        branches.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
+      if (branches.includes(cur)) sel.value=cur;
+      renderCheckins();
+    }
+    function renderCheckins(){
+      const b=$('ciBranch').value;
+      const rows=_checkins.filter(c=> !b || c.branch===b);
       const today = new Date().toISOString().slice(0,10);
-      $('cTotal').textContent = _checkins.length;
-      $('cToday').textContent = _checkins.filter(c=>(c.created_at||'').slice(0,10)===today).length;
-      $('cUnique').textContent = new Set(_checkins.map(c=>c.phone)).size;
-      $('ciBody').innerHTML = _checkins.length ? _checkins.map(c=>`
-        <tr><td class="muted mono">${fmt(c.created_at)}</td><td>${esc(c.name)||'<span class="muted">—</span>'}</td><td class="mono">${esc(c.phone)}</td></tr>
-      `).join('') : `<tr><td colspan="3" class="muted" style="text-align:center;padding:22px">No check-ins yet.</td></tr>`;
+      $('cTotal').textContent = rows.length;
+      $('cToday').textContent = rows.filter(c=>(c.created_at||'').slice(0,10)===today).length;
+      $('cUnique').textContent = new Set(rows.map(c=>c.phone)).size;
+      $('ciBody').innerHTML = rows.length ? rows.map(c=>`
+        <tr><td class="muted mono">${fmt(c.created_at)}</td><td>${esc(c.name)||'<span class="muted">—</span>'}</td><td class="mono">${esc(c.phone)}</td><td>${esc(c.branch)||'<span class="muted">—</span>'}</td></tr>
+      `).join('') : `<tr><td colspan="4" class="muted" style="text-align:center;padding:22px">No check-ins yet.</td></tr>`;
     }
     function exportCsv(){
-      const head=['Date','Time','Username','Phone'];
-      const rows=_checkins.map(c=>{ const d=new Date(c.created_at); return [d.toLocaleDateString(), d.toLocaleTimeString(), c.name||'', c.phone||'']; });
+      const b=$('ciBranch').value;
+      const list=_checkins.filter(c=> !b || c.branch===b);
+      const head=['Date','Time','Username','Phone','Branch'];
+      const rows=list.map(c=>{ const d=new Date(c.created_at); return [d.toLocaleDateString(), d.toLocaleTimeString(), c.name||'', c.phone||'', c.branch||'']; });
       const csv=[head,...rows].map(r=>r.map(v=>/[",\n]/.test(v)?`"${String(v).replace(/"/g,'""')}"`:v).join(',')).join('\n');
       const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
       const a=document.createElement('a'); a.href=url; a.download='blogger-checkins.csv'; a.click(); URL.revokeObjectURL(url);
