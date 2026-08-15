@@ -61,6 +61,7 @@
       <div class="row" style="margin-bottom:16px">
         <a class="tab active" id="tab-list" onclick="showTab('list')">Registered numbers</a>
         <a class="tab" id="tab-checkins" onclick="showTab('checkins')">Check-ins</a>
+        <a class="tab" id="tab-menu" onclick="showTab('menu')">Menu</a>
       </div>
 
       <!-- LIST TAB -->
@@ -85,6 +86,27 @@
           <div style="overflow-x:auto">
             <table><thead><tr><th>Username</th><th>Phone</th><th>Status</th><th></th></tr></thead>
               <tbody id="listBody"></tbody></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- MENU TAB -->
+      <div id="pane-menu" class="hide">
+        <div class="card">
+          <h2>Add menu item</h2>
+          <div class="row">
+            <input id="miName" placeholder="Item — e.g. V60 · Ethiopia" style="flex:2;min-width:170px">
+            <input id="miAr" dir="rtl" placeholder="الاسم بالعربي (اختياري)" style="flex:1.4;min-width:140px">
+            <input id="miNote" placeholder="Note (optional) — e.g. one per guest" style="flex:2;min-width:170px">
+            <button onclick="addMenuItem()">Add</button>
+          </div>
+          <div class="note">Shown to the blogger on the success screen right after they check in — "Available for you · متاح لك".</div>
+        </div>
+        <div class="card">
+          <div class="between" style="margin-bottom:12px"><h2 style="margin:0">Menu · <span id="menuCount">0</span></h2></div>
+          <div style="overflow-x:auto">
+            <table><thead><tr><th>Item</th><th>Arabic</th><th>Note</th><th>Status</th><th></th></tr></thead>
+              <tbody id="menuBody"></tbody></table>
           </div>
         </div>
       </div>
@@ -145,7 +167,43 @@
     async function signOut(){ await sb.auth.signOut(); location.reload(); }
     function enter(){ $('login').classList.add('hide'); $('console').classList.remove('hide'); $('signout').classList.remove('hide'); loadAll(); }
 
-    async function loadAll(){ await Promise.all([loadList(), loadCheckins()]); }
+    async function loadAll(){ await Promise.all([loadList(), loadCheckins(), loadMenu()]); }
+
+    // ---- Campaign menu (shown to bloggers after a successful check-in) ----
+    let _menu = [];
+    async function loadMenu(){
+      const { data, error } = await sb.from('blogger_menu').select('*').order('sort_order').order('created_at');
+      if (error){
+        _menu = [];
+        $('menuBody').innerHTML = `<tr><td colspan="5" class="muted" style="text-align:center;padding:22px">${/does not exist/i.test(error.message)?'Menu table missing — run the menu SQL first.':'Load failed.'}</td></tr>`;
+        return;
+      }
+      _menu = data||[]; renderMenu();
+    }
+    function renderMenu(){
+      $('menuCount').textContent = _menu.length;
+      $('menuBody').innerHTML = _menu.length ? _menu.map(m=>`
+        <tr>
+          <td>${esc(m.name)}</td>
+          <td dir="rtl">${esc(m.name_ar)||'<span class="muted">—</span>'}</td>
+          <td class="muted">${esc(m.note)||'—'}</td>
+          <td><span class="pill ${m.active?'on':'off'}">${m.active?'Active':'Off'}</span></td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="ghost sm" onclick="toggleMenuItem('${m.id}',${m.active})">${m.active?'Hide':'Show'}</button>
+            <button class="ghost sm" onclick="removeMenuItem('${m.id}')">Delete</button>
+          </td>
+        </tr>`).join('') : `<tr><td colspan="5" class="muted" style="text-align:center;padding:22px">No menu items yet.</td></tr>`;
+    }
+    async function addMenuItem(){
+      const name=$('miName').value.trim();
+      if (!name){ toast('Item name is required'); return; }
+      const { error } = await sb.from('blogger_menu').insert({ name, name_ar:$('miAr').value.trim()||null, note:$('miNote').value.trim()||null });
+      if (error){ toast(/does not exist/i.test(error.message)?'Run the menu SQL first':error.message); return; }
+      $('miName').value=''; $('miAr').value=''; $('miNote').value='';
+      toast('Menu item added'); loadMenu();
+    }
+    async function toggleMenuItem(id,cur){ await sb.from('blogger_menu').update({active:!cur}).eq('id',id); loadMenu(); }
+    async function removeMenuItem(id){ if(!confirm('Delete this menu item?')) return; await sb.from('blogger_menu').delete().eq('id',id); loadMenu(); }
 
     async function loadList(){
       const { data, error } = await sb.from('blogger_allowlist').select('*').order('created_at',{ascending:false});
@@ -230,7 +288,7 @@
       const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
       const a=document.createElement('a'); a.href=url; a.download='blogger-checkins.csv'; a.click(); URL.revokeObjectURL(url);
     }
-    function showTab(t){ ['list','checkins'].forEach(x=>{ $('pane-'+x).classList.toggle('hide',x!==t); $('tab-'+x).classList.toggle('active',x===t); }); }
+    function showTab(t){ ['list','checkins','menu'].forEach(x=>{ $('pane-'+x).classList.toggle('hide',x!==t); $('tab-'+x).classList.toggle('active',x===t); }); }
     function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function fmt(iso){ const d=new Date(iso); return d.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' · '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}); }
     $('pw').addEventListener('keydown', e=>{ if(e.key==='Enter') signIn(); });

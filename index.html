@@ -43,9 +43,20 @@
     .tick svg{ width:56px; height:56px; stroke:var(--ok); }
     @keyframes pop{ 0%{ transform:scale(.4); opacity:0 } 100%{ transform:scale(1); opacity:1 } }
     .over h2{ font-size:30px; margin:0 0 6px; letter-spacing:-.02em; }
-    .over p{ color:var(--muted); font-size:16px; margin:0 0 26px; max-width:320px; line-height:1.5; }
+    .over p{ color:var(--muted); font-size:16px; margin:0 0 22px; max-width:320px; line-height:1.5; }
     .over button{ max-width:260px; background:#2a2320; }
     .over button:hover{ background:#000; }
+    /* campaign menu on the success screen */
+    .menu{ display:none; width:100%; max-width:340px; background:#fff; border:1px solid var(--ring);
+      border-radius:16px; padding:16px 18px 10px; margin:0 0 22px; text-align:start;
+      max-height:38vh; overflow:auto; box-shadow:0 14px 34px -26px rgba(60,40,20,.4); }
+    .menu.show{ display:block; }
+    .menu .mt{ font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--brand); font-weight:800; margin-bottom:8px; }
+    .mi{ padding:8px 0; border-bottom:1px solid #f3ede6; }
+    .mi:last-child{ border-bottom:none; }
+    .mi .n{ font-weight:700; font-size:15px; }
+    .mi .n span{ color:var(--muted); font-weight:600; }
+    .mi .d{ font-size:12.5px; color:var(--muted); margin-top:2px; line-height:1.4; }
   </style>
 </head>
 <body>
@@ -73,6 +84,10 @@
     <div class="tick"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
     <h2 id="okTitle">You're in!</h2>
     <p>Enjoy the coffee and the tasting — we're glad to have you. 🎬☕<br><span dir="rtl">استمتع بالقهوة والتذوّق — سعداء بوجودك معنا.</span></p>
+    <div class="menu" id="menu">
+      <div class="mt">Available for you · متاح لك</div>
+      <div id="menuItems"></div>
+    </div>
     <button onclick="reset()">Done · تم</button>
   </section>
 
@@ -117,6 +132,7 @@
         if (error) throw error;
         if (data && data.ok){
           $('okTitle').textContent = data.name ? ('You’re in, ' + data.name + '! · تم تسجيلك') : 'You’re in! · تم تسجيلك';
+          showMenu(Array.isArray(data.items) ? data.items : []);
           $('ok').classList.add('show');
         } else if (data && data.reason === 'already'){
           const who = data.name ? (', ' + data.name) : '';
@@ -131,8 +147,20 @@
         console.error(e);
       } finally { setBusy(false); }
     }
+    function esc(s){ return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    function showMenu(items){
+      const box = $('menu');
+      if (!items.length){ box.classList.remove('show'); $('menuItems').innerHTML=''; return; }
+      $('menuItems').innerHTML = items.map(it => `
+        <div class="mi">
+          <div class="n">${esc(it.name)}${it.name_ar ? ` <span dir="rtl">· ${esc(it.name_ar)}</span>` : ''}</div>
+          ${it.note ? `<div class="d">${esc(it.note)}</div>` : ''}
+        </div>`).join('');
+      box.classList.add('show');
+    }
     function reset(){
       $('ok').classList.remove('show');
+      showMenu([]);
       $('name').value=''; $('phone').value=''; clearMsg(); $('name').focus();
     }
     $('phone').addEventListener('keydown', e=>{ if(e.key==='Enter') checkin(); });

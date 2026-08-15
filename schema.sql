@@ -32,6 +32,19 @@ create index if not exists blogger_checkins_created_idx on public.blogger_checki
 alter table public.blogger_checkins add column if not exists branch text;
 create index if not exists blogger_checkins_branch_idx on public.blogger_checkins(branch);
 
+-- 2b. The campaign menu — items available to bloggers, shown on the success
+--     screen right after check-in. Managed from the admin console; delivered
+--     to the public page only through blogger_checkin() (never direct reads).
+create table if not exists public.blogger_menu (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  name_ar    text,
+  note       text,
+  sort_order int  not null default 0,
+  active     boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
 -- 3. Phone normaliser: strip non-digits, keep the last 9 (so "0551234567",
 --    "+966551234567" and "551234567" all match the same blogger).
 create or replace function public.norm_phone(p text)
@@ -53,7 +66,7 @@ language plpgsql
 security definer
 set search_path = public
 as $$
-declare v_row public.blogger_allowlist; v_norm text; v_branch text;
+declare v_row public.blogger_allowlist; v_norm text; v_branch text; v_items jsonb;
 begin
   v_norm := public.norm_phone(p_phone);
   v_branch := nullif(upper(left(trim(coalesce(p_branch, '')), 40)), '');
@@ -73,7 +86,13 @@ begin
   end if;
   insert into public.blogger_checkins(phone, name, allowlist_id, branch)
     values (v_norm, coalesce(nullif(trim(p_name), ''), v_row.name), v_row.id, v_branch);
-  return jsonb_build_object('ok', true, 'name', coalesce(v_row.name, nullif(trim(p_name), '')));
+  -- The campaign menu, shown on the success screen (empty array if none).
+  select coalesce(jsonb_agg(jsonb_build_object('name', name, 'name_ar', name_ar, 'note', note)
+                            order by sort_order, created_at), '[]'::jsonb)
+    into v_items from public.blogger_menu where active;
+  return jsonb_build_object('ok', true,
+    'name', coalesce(v_row.name, nullif(trim(p_name), '')),
+    'items', v_items);
 end $$;
 
 -- 5. Lock the tables down. RLS on, no anon policies → the public page cannot
@@ -81,18 +100,21 @@ end $$;
 --    The admin console signs in (Supabase Auth) and gets full access.
 alter table public.blogger_allowlist enable row level security;
 alter table public.blogger_checkins  enable row level security;
+alter table public.blogger_menu      enable row level security;
 
 do $$
 declare r record;
 begin
   for r in select policyname, tablename from pg_policies
-           where schemaname='public' and tablename in ('blogger_allowlist','blogger_checkins')
+           where schemaname='public' and tablename in ('blogger_allowlist','blogger_checkins','blogger_menu')
   loop execute format('drop policy if exists %I on public.%I', r.policyname, r.tablename); end loop;
 end $$;
 
 create policy allowlist_admin on public.blogger_allowlist
   for all to authenticated using (true) with check (true);
 create policy checkins_admin on public.blogger_checkins
+  for all to authenticated using (true) with check (true);
+create policy menu_admin on public.blogger_menu
   for all to authenticated using (true) with check (true);
 
 -- anon can execute the check-in function, nothing else.
