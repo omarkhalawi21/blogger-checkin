@@ -32,6 +32,10 @@ create index if not exists blogger_checkins_created_idx on public.blogger_checki
 alter table public.blogger_checkins add column if not exists branch text;
 create index if not exists blogger_checkins_branch_idx on public.blogger_checkins(branch);
 
+-- What the blogger picked from the menu (2 coffees + 1 sweet), e.g.
+-- [{"category":"COFFEE","name":"Espresso Freddo","name_ar":"..."}, ...]
+alter table public.blogger_checkins add column if not exists picks jsonb;
+
 -- 2b. The campaign menu — items available to bloggers, shown on the success
 --     screen right after check-in. Managed from the admin console; delivered
 --     to the public page only through blogger_checkin() (never direct reads).
@@ -57,18 +61,19 @@ $$;
 -- 4. The ONLY thing the public page can call. Runs as the owner (security
 --    definer), checks the list, records the visit, and returns just a
 --    yes/no + the name — the number list itself is never exposed.
--- The old 2-arg version must be dropped (not replaced) so PostgREST doesn't
--- see two overloads and refuse the call. The 3-arg version defaults
--- p_branch to null, so older cached pages that send only 2 args still work.
+-- Older signatures must be dropped (not replaced) so PostgREST doesn't see
+-- multiple overloads and refuse the call. New args default to null, so older
+-- cached pages that send fewer args still work.
 drop function if exists public.blogger_checkin(text, text);
+drop function if exists public.blogger_checkin(text, text, text);
 
-create or replace function public.blogger_checkin(p_phone text, p_name text, p_branch text default null)
+create or replace function public.blogger_checkin(p_phone text, p_name text, p_branch text default null, p_picks jsonb default null)
 returns jsonb
 language plpgsql
 security definer
 set search_path = public
 as $$
-declare v_row public.blogger_allowlist; v_norm text; v_branch text; v_items jsonb;
+declare v_row public.blogger_allowlist; v_norm text; v_branch text; v_picks jsonb;
 begin
   v_norm := public.norm_phone(p_phone);
   v_branch := nullif(upper(left(trim(coalesce(p_branch, '')), 40)), '');
@@ -86,19 +91,46 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'already',
       'name', v_row.name);
   end if;
-  insert into public.blogger_checkins(phone, name, allowlist_id, branch)
-    values (v_norm, coalesce(nullif(trim(p_name), ''), v_row.name), v_row.id, v_branch);
-  -- The campaign menu, shown on the success screen (empty array if none).
-  -- Coffee first, then Sweet, then anything uncategorized.
-  select coalesce(jsonb_agg(jsonb_build_object('name', name, 'name_ar', name_ar,
-                                               'note', note, 'category', category)
-                            order by case category when 'COFFEE' then 0 when 'SWEET' then 1 else 2 end,
-                                     sort_order, created_at), '[]'::jsonb)
-    into v_items from public.blogger_menu where active;
+  -- Resolve the picked ids against the ACTIVE menu, server-side: at most
+  -- 2 coffees + 1 sweet survive, and names come from the table — the client
+  -- only ever sends ids, so it can't invent items.
+  if p_picks is not null and jsonb_typeof(p_picks) = 'array' then
+    select jsonb_agg(jsonb_build_object('category', t.category, 'name', t.name, 'name_ar', t.name_ar)
+                     order by case t.category when 'COFFEE' then 0 else 1 end, t.sort_order)
+      into v_picks
+      from (
+        (select m.* from public.blogger_menu m
+          where m.active and m.category = 'COFFEE'
+            and m.id::text in (select value from jsonb_array_elements_text(p_picks))
+          order by m.sort_order, m.created_at limit 2)
+        union all
+        (select m.* from public.blogger_menu m
+          where m.active and m.category = 'SWEET'
+            and m.id::text in (select value from jsonb_array_elements_text(p_picks))
+          order by m.sort_order, m.created_at limit 1)
+      ) t;
+  end if;
+  insert into public.blogger_checkins(phone, name, allowlist_id, branch, picks)
+    values (v_norm, coalesce(nullif(trim(p_name), ''), v_row.name), v_row.id, v_branch, v_picks);
   return jsonb_build_object('ok', true,
     'name', coalesce(v_row.name, nullif(trim(p_name), '')),
-    'items', v_items);
+    'picks', coalesce(v_picks, '[]'::jsonb));
 end $$;
+
+-- 4b. The menu the form shows BEFORE check-in (ids + names of active items
+--     only). Security definer so the table itself stays locked to anon.
+create or replace function public.blogger_menu_public()
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+  select coalesce(jsonb_agg(jsonb_build_object('id', id, 'category', category,
+                                               'name', name, 'name_ar', name_ar, 'note', note)
+                            order by case category when 'COFFEE' then 0 when 'SWEET' then 1 else 2 end,
+                                     sort_order, created_at), '[]'::jsonb)
+    from public.blogger_menu where active and category in ('COFFEE','SWEET');
+$$;
 
 -- 5. Lock the tables down. RLS on, no anon policies → the public page cannot
 --    read or write them directly; it can only call blogger_checkin() above.
@@ -122,9 +154,10 @@ create policy checkins_admin on public.blogger_checkins
 create policy menu_admin on public.blogger_menu
   for all to authenticated using (true) with check (true);
 
--- anon can execute the check-in function, nothing else.
-grant execute on function public.blogger_checkin(text, text, text) to anon, authenticated;
-grant execute on function public.norm_phone(text)                   to anon, authenticated;
+-- anon can execute the check-in + menu functions, nothing else.
+grant execute on function public.blogger_checkin(text, text, text, jsonb) to anon, authenticated;
+grant execute on function public.blogger_menu_public()                    to anon, authenticated;
+grant execute on function public.norm_phone(text)                         to anon, authenticated;
 
 -- ============================================================================
 -- Diagnostic — should return true / true / true:
