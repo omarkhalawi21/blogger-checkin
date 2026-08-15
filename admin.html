@@ -93,21 +93,31 @@
       <!-- MENU TAB -->
       <div id="pane-menu" class="hide">
         <div class="card">
-          <h2>Add menu item</h2>
-          <div class="row">
-            <select id="miCat" style="font-size:15px;padding:11px 12px;border:1.5px solid var(--ring);border-radius:11px;background:#fdfcfa;color:var(--ink)">
-              <option value="COFFEE">Coffee · قهوة</option>
-              <option value="SWEET">Sweet · حلى</option>
+          <h2>Categories · <span id="catCount">0</span></h2>
+          <div class="row" style="margin-bottom:14px">
+            <select id="mcKind" style="font-size:15px;padding:11px 12px;border:1.5px solid var(--ring);border-radius:11px;background:#fdfcfa;color:var(--ink)">
+              <option value="COFFEE">Coffee-type · قهوة</option>
+              <option value="SWEET">Sweet-type · حلى</option>
             </select>
-            <input id="miName" placeholder="Item — e.g. V60 · Ethiopia" style="flex:2;min-width:170px">
-            <input id="miAr" dir="rtl" placeholder="الاسم بالعربي (اختياري)" style="flex:1.4;min-width:140px">
-            <input id="miNote" placeholder="Note (optional) — e.g. one per guest" style="flex:2;min-width:170px">
-            <button onclick="addMenuItem()">Add</button>
+            <input id="mcName" placeholder="Category — e.g. V60, Milk Coffee" style="flex:2;min-width:170px">
+            <input id="mcAr" dir="rtl" placeholder="الاسم بالعربي (اختياري)" style="flex:1.4;min-width:140px">
+            <button onclick="addMenuCat()">Add category</button>
           </div>
-          <div class="note">Shown to the blogger on the success screen right after they check in — "Available for you · متاح لك" — grouped by category (Coffee first, then Sweet).</div>
+          <div style="overflow-x:auto">
+            <table><thead><tr><th>Type</th><th>Category</th><th>Arabic</th><th>Status</th><th></th></tr></thead>
+              <tbody id="catBody"></tbody></table>
+          </div>
+          <div class="note">Each category becomes one dropdown on the check-in form. The blogger picks from <b>2 different coffee-type categories + 1 sweet-type</b>.</div>
         </div>
         <div class="card">
-          <div class="between" style="margin-bottom:12px"><h2 style="margin:0">Menu · <span id="menuCount">0</span></h2></div>
+          <h2>Items · <span id="menuCount">0</span></h2>
+          <div class="row" style="margin-bottom:14px">
+            <select id="miCat" style="font-size:15px;padding:11px 12px;border:1.5px solid var(--ring);border-radius:11px;background:#fdfcfa;color:var(--ink)"></select>
+            <input id="miName" placeholder="Item — e.g. Ethiopia" style="flex:2;min-width:170px">
+            <input id="miAr" dir="rtl" placeholder="الاسم بالعربي (اختياري)" style="flex:1.4;min-width:140px">
+            <input id="miNote" placeholder="Note (optional)" style="flex:1.6;min-width:150px">
+            <button onclick="addMenuItem()">Add</button>
+          </div>
           <div style="overflow-x:auto">
             <table><thead><tr><th>Category</th><th>Item</th><th>Arabic</th><th>Note</th><th>Status</th><th></th></tr></thead>
               <tbody id="menuBody"></tbody></table>
@@ -123,6 +133,14 @@
             <div><div class="stat" id="cToday">0</div><div class="muted" style="font-size:12px">Today</div></div>
             <div><div class="stat" id="cUnique">0</div><div class="muted" style="font-size:12px">Unique bloggers</div></div>
           </div>
+        </div>
+        <div class="card">
+          <div class="between" style="margin-bottom:12px"><h2 style="margin:0">Consumption</h2></div>
+          <div style="overflow-x:auto">
+            <table><thead><tr><th>Item</th><th>Category</th><th>Count</th></tr></thead>
+              <tbody id="consBody"></tbody></table>
+          </div>
+          <div class="note">Counted from what bloggers picked at check-in, following the branch filter below — your end-of-campaign totals.</div>
         </div>
         <div class="card">
           <div class="between" style="margin-bottom:12px">
@@ -173,28 +191,55 @@
 
     async function loadAll(){ await Promise.all([loadList(), loadCheckins(), loadMenu()]); }
 
-    // ---- Campaign menu (shown to bloggers after a successful check-in) ----
-    let _menu = [];
+    // ---- Campaign menu: dynamic categories, each a dropdown on the form ----
+    let _menu = [], _mcats = [];
+    const kindRank = k => k==='COFFEE' ? 0 : 1;
+    const catById = id => _mcats.find(c=>c.id===id);
+    const selStyle = 'font-size:13px;padding:6px 8px;border:1.5px solid var(--ring);border-radius:9px;background:#fdfcfa;color:var(--ink)';
     async function loadMenu(){
-      const { data, error } = await sb.from('blogger_menu').select('*').order('sort_order').order('created_at');
-      if (error){
-        _menu = [];
-        $('menuBody').innerHTML = `<tr><td colspan="5" class="muted" style="text-align:center;padding:22px">${/does not exist/i.test(error.message)?'Menu table missing — run the menu SQL first.':'Load failed.'}</td></tr>`;
+      const [cR, mR] = await Promise.all([
+        sb.from('blogger_menu_categories').select('*').order('sort_order').order('created_at'),
+        sb.from('blogger_menu').select('*').order('sort_order').order('created_at'),
+      ]);
+      if (cR.error || mR.error){
+        const msg=(cR.error||mR.error).message;
+        _mcats=[]; _menu=[];
+        $('catBody').innerHTML = `<tr><td colspan="5" class="muted" style="text-align:center;padding:22px">${/does not exist/i.test(msg)?'Run the categories SQL first.':'Load failed.'}</td></tr>`;
+        $('menuBody').innerHTML = '';
         return;
       }
-      _menu = data||[]; renderMenu();
+      _mcats = cR.data||[]; _menu = mR.data||[];
+      renderMenu();
     }
-    const catRank = c => c==='COFFEE' ? 0 : c==='SWEET' ? 1 : 2;
     function renderMenu(){
+      const cats = [..._mcats].sort((a,b)=> kindRank(a.kind)-kindRank(b.kind) || a.sort_order-b.sort_order);
+      $('catCount').textContent = _mcats.length;
+      $('catBody').innerHTML = cats.length ? cats.map(c=>`
+        <tr>
+          <td><span class="pill ${c.kind==='COFFEE'?'on':'off'}">${c.kind==='COFFEE'?'Coffee':'Sweet'}</span></td>
+          <td>${esc(c.name)}</td>
+          <td dir="rtl">${esc(c.name_ar)||'<span class="muted">—</span>'}</td>
+          <td><span class="pill ${c.active?'on':'off'}">${c.active?'Active':'Off'}</span></td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="ghost sm" onclick="toggleCat('${c.id}',${c.active})">${c.active?'Hide':'Show'}</button>
+            <button class="ghost sm" onclick="removeCat('${c.id}')">Delete</button>
+          </td>
+        </tr>`).join('') : `<tr><td colspan="5" class="muted" style="text-align:center;padding:22px">No categories yet — add V60, Milk Coffee, Sweet…</td></tr>`;
+      $('miCat').innerHTML = cats.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')
+        || '<option value="">— add a category first —</option>';
+      const rows = [..._menu].sort((a,b)=>{
+        const ca=catById(a.category_id), cb=catById(b.category_id);
+        return (ca?kindRank(ca.kind):2)-(cb?kindRank(cb.kind):2)
+          || ((ca?ca.sort_order:999)-(cb?cb.sort_order:999))
+          || a.sort_order-b.sort_order;
+      });
       $('menuCount').textContent = _menu.length;
-      const rows = [..._menu].sort((a,b)=> catRank(a.category)-catRank(b.category));
       $('menuBody').innerHTML = rows.length ? rows.map(m=>`
         <tr>
           <td>
-            <select onchange="setMenuCat('${m.id}',this.value)" style="font-size:13px;padding:6px 8px;border:1.5px solid var(--ring);border-radius:9px;background:#fdfcfa;color:var(--ink)">
-              <option value="COFFEE" ${m.category==='COFFEE'?'selected':''}>Coffee</option>
-              <option value="SWEET" ${m.category==='SWEET'?'selected':''}>Sweet</option>
-              ${m.category!=='COFFEE'&&m.category!=='SWEET' ? '<option value="" selected>—</option>' : ''}
+            <select onchange="setItemCat('${m.id}',this.value)" style="${selStyle}">
+              ${_mcats.map(c=>`<option value="${c.id}" ${m.category_id===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
+              ${!m.category_id ? '<option value="" selected>—</option>' : ''}
             </select>
           </td>
           <td>${esc(m.name)}</td>
@@ -207,16 +252,32 @@
           </td>
         </tr>`).join('') : `<tr><td colspan="6" class="muted" style="text-align:center;padding:22px">No menu items yet.</td></tr>`;
     }
-    async function setMenuCat(id,val){
-      const { error } = await sb.from('blogger_menu').update({ category: val||null }).eq('id',id);
-      if (error){ toast(/column/i.test(error.message)?'Run the category SQL first':error.message); return; }
+    async function addMenuCat(){
+      const name=$('mcName').value.trim();
+      if (!name){ toast('Category name is required'); return; }
+      const { error } = await sb.from('blogger_menu_categories').insert({
+        name, name_ar:$('mcAr').value.trim()||null, kind:$('mcKind').value, sort_order:_mcats.length });
+      if (error){ toast(/does not exist/i.test(error.message)?'Run the categories SQL first':error.message); return; }
+      $('mcName').value=''; $('mcAr').value='';
+      toast('Category added'); loadMenu();
+    }
+    async function toggleCat(id,cur){ await sb.from('blogger_menu_categories').update({active:!cur}).eq('id',id); loadMenu(); }
+    async function removeCat(id){
+      if(!confirm('Delete this category? Its items become uncategorized and disappear from the form until reassigned.')) return;
+      await sb.from('blogger_menu_categories').delete().eq('id',id); loadMenu();
+    }
+    async function setItemCat(id,val){
+      const { error } = await sb.from('blogger_menu').update({ category_id: val||null }).eq('id',id);
+      if (error){ toast(error.message); return; }
       loadMenu();
     }
     async function addMenuItem(){
       const name=$('miName').value.trim();
       if (!name){ toast('Item name is required'); return; }
-      const { error } = await sb.from('blogger_menu').insert({ name, category:$('miCat').value, name_ar:$('miAr').value.trim()||null, note:$('miNote').value.trim()||null });
-      if (error){ toast(/does not exist|column/i.test(error.message)?'Run the menu SQL first':error.message); return; }
+      const catId=$('miCat').value;
+      if (!catId){ toast('Add a category first'); return; }
+      const { error } = await sb.from('blogger_menu').insert({ name, category_id:catId, name_ar:$('miAr').value.trim()||null, note:$('miNote').value.trim()||null });
+      if (error){ toast(/does not exist|column/i.test(error.message)?'Run the categories SQL first':error.message); return; }
       $('miName').value=''; $('miAr').value=''; $('miNote').value='';
       toast('Menu item added'); loadMenu();
     }
@@ -296,6 +357,17 @@
       $('ciBody').innerHTML = rows.length ? rows.map(c=>`
         <tr><td class="muted mono">${fmt(c.created_at)}</td><td>${esc(c.name)||'<span class="muted">—</span>'}</td><td class="mono">${esc(c.phone)}</td><td>${esc(c.branch)||'<span class="muted">—</span>'}</td><td class="muted">${esc(picksText(c))||'—'}</td></tr>
       `).join('') : `<tr><td colspan="5" class="muted" style="text-align:center;padding:22px">No check-ins yet.</td></tr>`;
+      // Consumption totals — how many of each item were picked (branch-filtered).
+      const counts = {};
+      rows.forEach(c => (Array.isArray(c.picks)?c.picks:[]).forEach(p => {
+        const k = (p.name||'') + '' + (p.category||'');
+        counts[k] = (counts[k]||0) + 1;
+      }));
+      const entries = Object.entries(counts).sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0]));
+      $('consBody').innerHTML = entries.length ? entries.map(([k,n])=>{
+        const [nm,cat] = k.split('');
+        return `<tr><td>${esc(nm)}</td><td class="muted">${esc(cat)||'—'}</td><td class="mono"><b>${n}</b></td></tr>`;
+      }).join('') : `<tr><td colspan="3" class="muted" style="text-align:center;padding:22px">No picks recorded yet.</td></tr>`;
     }
     function picksText(c){ return Array.isArray(c.picks) ? c.picks.map(p=>p.name).filter(Boolean).join(' + ') : ''; }
     function exportCsv(){

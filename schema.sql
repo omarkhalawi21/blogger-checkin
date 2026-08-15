@@ -49,7 +49,37 @@ create table if not exists public.blogger_menu (
   active     boolean not null default true,
   created_at timestamptz not null default now()
 );
-alter table public.blogger_menu add column if not exists category text;
+alter table public.blogger_menu add column if not exists category text;   -- legacy fixed tag, superseded by category_id
+
+-- 2c. Dynamic menu categories (V60, Milk Coffee, Espresso, Sweet, ...) with a
+--     dropdown of items each. kind drives the campaign rule: the blogger picks
+--     from 2 different COFFEE-kind categories + 1 SWEET-kind category.
+create table if not exists public.blogger_menu_categories (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  name_ar    text,
+  kind       text not null default 'COFFEE' check (kind in ('COFFEE','SWEET')),
+  sort_order int  not null default 0,
+  active     boolean not null default true,
+  created_at timestamptz not null default now()
+);
+alter table public.blogger_menu add column if not exists category_id uuid references public.blogger_menu_categories(id) on delete set null;
+
+-- One-time backfill from the old fixed COFFEE/SWEET text tags.
+insert into public.blogger_menu_categories(name, name_ar, kind, sort_order)
+select 'Coffee', 'قهوة', 'COFFEE', 0
+ where exists (select 1 from public.blogger_menu where category = 'COFFEE' and category_id is null)
+   and not exists (select 1 from public.blogger_menu_categories where kind = 'COFFEE');
+insert into public.blogger_menu_categories(name, name_ar, kind, sort_order)
+select 'Sweet', 'حلى', 'SWEET', 100
+ where exists (select 1 from public.blogger_menu where category = 'SWEET' and category_id is null)
+   and not exists (select 1 from public.blogger_menu_categories where kind = 'SWEET');
+update public.blogger_menu
+   set category_id = (select id from public.blogger_menu_categories where kind = 'COFFEE' order by sort_order limit 1)
+ where category = 'COFFEE' and category_id is null;
+update public.blogger_menu
+   set category_id = (select id from public.blogger_menu_categories where kind = 'SWEET' order by sort_order limit 1)
+ where category = 'SWEET' and category_id is null;
 
 -- 3. Phone normaliser: strip non-digits, keep the last 9 (so "0551234567",
 --    "+966551234567" and "551234567" all match the same blogger).
@@ -91,23 +121,33 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'already',
       'name', v_row.name);
   end if;
-  -- Resolve the picked ids against the ACTIVE menu, server-side: at most
-  -- 2 coffees + 1 sweet survive, and names come from the table — the client
-  -- only ever sends ids, so it can't invent items.
+  -- Resolve the picked ids against the ACTIVE menu, server-side: at most one
+  -- item per category, max 2 COFFEE-kind + 1 SWEET-kind categories survive,
+  -- and names come from the tables — the client only ever sends ids, so it
+  -- can't invent items or inflate the consumption numbers.
   if p_picks is not null and jsonb_typeof(p_picks) = 'array' then
-    select jsonb_agg(jsonb_build_object('category', t.category, 'name', t.name, 'name_ar', t.name_ar)
-                     order by case t.category when 'COFFEE' then 0 else 1 end, t.sort_order)
+    select jsonb_agg(jsonb_build_object('item_id', t.id, 'category', t.cname,
+                                        'name', t.name, 'name_ar', t.name_ar)
+                     order by t.kindrank, t.csort)
       into v_picks
       from (
-        (select m.* from public.blogger_menu m
-          where m.active and m.category = 'COFFEE'
+        (select distinct on (m.category_id)
+                m.id, m.name, m.name_ar, c.name as cname, c.sort_order as csort, 0 as kindrank
+           from public.blogger_menu m
+           join public.blogger_menu_categories c on c.id = m.category_id
+          where m.active and c.active and c.kind = 'COFFEE'
             and m.id::text in (select value from jsonb_array_elements_text(p_picks))
-          order by m.sort_order, m.created_at limit 2)
+          order by m.category_id, m.sort_order, m.created_at
+          limit 2)
         union all
-        (select m.* from public.blogger_menu m
-          where m.active and m.category = 'SWEET'
+        (select distinct on (m.category_id)
+                m.id, m.name, m.name_ar, c.name as cname, c.sort_order as csort, 1 as kindrank
+           from public.blogger_menu m
+           join public.blogger_menu_categories c on c.id = m.category_id
+          where m.active and c.active and c.kind = 'SWEET'
             and m.id::text in (select value from jsonb_array_elements_text(p_picks))
-          order by m.sort_order, m.created_at limit 1)
+          order by m.category_id, m.sort_order, m.created_at
+          limit 1)
       ) t;
   end if;
   insert into public.blogger_checkins(phone, name, allowlist_id, branch, picks)
@@ -117,33 +157,41 @@ begin
     'picks', coalesce(v_picks, '[]'::jsonb));
 end $$;
 
--- 4b. The menu the form shows BEFORE check-in (ids + names of active items
---     only). Security definer so the table itself stays locked to anon.
+-- 4b. The menu the form shows BEFORE check-in: active categories with their
+--     active items nested (coffee categories first). Security definer so the
+--     tables themselves stay locked to anon.
 create or replace function public.blogger_menu_public()
 returns jsonb
 language sql
 security definer
 set search_path = public
 as $$
-  select coalesce(jsonb_agg(jsonb_build_object('id', id, 'category', category,
-                                               'name', name, 'name_ar', name_ar, 'note', note)
-                            order by case category when 'COFFEE' then 0 when 'SWEET' then 1 else 2 end,
-                                     sort_order, created_at), '[]'::jsonb)
-    from public.blogger_menu where active and category in ('COFFEE','SWEET');
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', c.id, 'name', c.name, 'name_ar', c.name_ar, 'kind', c.kind,
+           'items', (select coalesce(jsonb_agg(jsonb_build_object(
+                              'id', m.id, 'name', m.name, 'name_ar', m.name_ar, 'note', m.note)
+                            order by m.sort_order, m.created_at), '[]'::jsonb)
+                       from public.blogger_menu m
+                      where m.active and m.category_id = c.id))
+         order by case c.kind when 'COFFEE' then 0 else 1 end, c.sort_order, c.created_at), '[]'::jsonb)
+    from public.blogger_menu_categories c
+   where c.active
+     and exists (select 1 from public.blogger_menu m where m.active and m.category_id = c.id);
 $$;
 
 -- 5. Lock the tables down. RLS on, no anon policies → the public page cannot
 --    read or write them directly; it can only call blogger_checkin() above.
 --    The admin console signs in (Supabase Auth) and gets full access.
-alter table public.blogger_allowlist enable row level security;
-alter table public.blogger_checkins  enable row level security;
-alter table public.blogger_menu      enable row level security;
+alter table public.blogger_allowlist       enable row level security;
+alter table public.blogger_checkins        enable row level security;
+alter table public.blogger_menu            enable row level security;
+alter table public.blogger_menu_categories enable row level security;
 
 do $$
 declare r record;
 begin
   for r in select policyname, tablename from pg_policies
-           where schemaname='public' and tablename in ('blogger_allowlist','blogger_checkins','blogger_menu')
+           where schemaname='public' and tablename in ('blogger_allowlist','blogger_checkins','blogger_menu','blogger_menu_categories')
   loop execute format('drop policy if exists %I on public.%I', r.policyname, r.tablename); end loop;
 end $$;
 
@@ -152,6 +200,8 @@ create policy allowlist_admin on public.blogger_allowlist
 create policy checkins_admin on public.blogger_checkins
   for all to authenticated using (true) with check (true);
 create policy menu_admin on public.blogger_menu
+  for all to authenticated using (true) with check (true);
+create policy menu_cats_admin on public.blogger_menu_categories
   for all to authenticated using (true) with check (true);
 
 -- anon can execute the check-in + menu functions, nothing else.

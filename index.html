@@ -58,14 +58,12 @@
     .menu .mc span{ color:#a99f95; font-weight:700; }
     .menu .mr{ font-size:13.5px; color:var(--muted); margin:10px 0 6px; padding-top:10px; border-top:1px solid #f3ede6; line-height:1.6; text-align:center; }
     .menu .mr b{ color:var(--ink); }
-    /* menu picker chips in the form */
-    .chips{ display:flex; flex-wrap:wrap; gap:8px; }
-    .chip{ font-size:14px; font-weight:600; padding:9px 13px; border:1.5px solid var(--ring); border-radius:999px;
-      background:#fdfbf8; color:var(--ink); cursor:pointer; user-select:none; transition:border-color .12s, background .12s; }
-    .chip span{ color:#a99f95; font-weight:600; }
-    .chip.sel{ border-color:var(--brand); background:rgba(176,42,42,.09); color:var(--brand-d); }
-    .chip.sel span{ color:var(--brand-d); }
-    .picked{ font-size:12px; color:var(--muted); margin-top:6px; }
+    /* menu picker dropdowns in the form */
+    select.pickSel{ width:100%; font-size:16px; padding:13px 14px; border:1.5px solid var(--ring); border-radius:14px;
+      background:#fdfbf8; color:var(--ink); outline:none; appearance:none; -webkit-appearance:none;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1 1l6 6 6-6' fill='none' stroke='%238a807a' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat:no-repeat; background-position:right 14px center; }
+    select.pickSel:focus{ border-color:var(--brand); box-shadow:0 0 0 4px rgba(176,42,42,.10); }
     .mi{ padding:8px 0; border-bottom:1px solid #f3ede6; }
     .mi:last-child{ border-bottom:none; }
     .mi .n{ font-weight:700; font-size:15px; }
@@ -89,10 +87,7 @@
       <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="05X XXX XXXX" />
     </div>
 
-    <div id="pickWrap" style="display:none">
-      <div class="field" id="pickCoffee"></div>
-      <div class="field" id="pickSweet"></div>
-    </div>
+    <div id="pickWrap" style="display:none"></div>
 
     <button id="go" onclick="checkin()"><span id="golabel">Check in · تسجيل الدخول</span></button>
     <div class="msg" id="msg"></div>
@@ -135,40 +130,51 @@
     function err(t){ const m=$('msg'); m.className='msg err'; m.textContent=t; }
     function clearMsg(){ const m=$('msg'); m.className='msg'; m.textContent=''; }
 
-    // ---- Menu picker: choose 2 coffees + 1 sweet before checking in ----
-    let _menuItems = [], _sel = { COFFEE: [], SWEET: [] };
+    // ---- Menu picker: one dropdown per category; the campaign rule is
+    // "pick from 2 different coffee categories + 1 sweet". ----
+    let _cats = [], _selCat = {}, _coffeeOrder = [];
     const LIMITS = { COFFEE: 2, SWEET: 1 };
     async function loadMenu(){
       if (!sb) return;
       const { data, error } = await sb.rpc('blogger_menu_public');
       if (error || !Array.isArray(data) || !data.length) return; // no menu (or SQL not run) → plain check-in
-      _menuItems = data;
+      _cats = data.filter(c => Array.isArray(c.items) && c.items.length);
       renderPicker();
     }
-    function renderPicker(){
-      const secs = [
-        ['COFFEE', 'pickCoffee', 'Pick 2 coffees', 'اختر قهوتين'],
-        ['SWEET',  'pickSweet',  'Pick 1 sweet',   'اختر حلى واحد'],
-      ];
-      let any = false;
-      secs.forEach(([cat, elId, en, ar]) => {
-        const items = _menuItems.filter(m => m.category === cat);
-        const el = $(elId);
-        if (!items.length){ el.innerHTML = ''; return; }
-        any = true;
-        el.innerHTML = `<label>${en} <span style="float:inline-end;color:#a99f95" dir="rtl">${ar}</span></label>
-          <div class="chips">` + items.map(m => `
-            <div class="chip ${_sel[cat].includes(m.id) ? 'sel' : ''}" onclick="togglePick('${cat}','${m.id}')">
-              ${esc(m.name)}${m.name_ar ? ` <span dir="rtl">${esc(m.name_ar)}</span>` : ''}
-            </div>`).join('') + `</div>
-          <div class="picked">${_sel[cat].length}/${Math.min(LIMITS[cat], items.length)} <span dir="rtl">· ${cat==='COFFEE'?'قهوة':'حلى'}</span></div>`;
-      });
-      $('pickWrap').style.display = any ? 'block' : 'none';
+    function kindCount(kind){
+      return _cats.filter(c => c.kind === kind && _selCat[c.id]).length;
     }
-    function togglePick(cat, id){
-      const sel = _sel[cat], i = sel.indexOf(id);
-      if (i >= 0) sel.splice(i, 1);
-      else { sel.push(id); if (sel.length > LIMITS[cat]) sel.shift(); } // over the limit → drop the oldest pick
+    function renderPicker(){
+      const wrap = $('pickWrap');
+      if (!_cats.length){ wrap.style.display = 'none'; return; }
+      const coffeeN = Math.min(LIMITS.COFFEE, _cats.filter(c => c.kind === 'COFFEE').length);
+      const head = coffeeN
+        ? `<label style="margin-bottom:10px">Pick ${coffeeN === 2 ? '2 coffees' : '1 coffee'} & 1 sweet
+             <span style="float:inline-end;color:#a99f95" dir="rtl">${coffeeN === 2 ? 'اختر قهوتين وحلى واحد' : 'اختر قهوة وحلى'}</span></label>`
+        : '';
+      wrap.innerHTML = head + _cats.map(c => `
+        <div class="field">
+          <label>${esc(c.name)}${c.name_ar ? ` <span style="float:inline-end;color:#a99f95" dir="rtl">${esc(c.name_ar)}</span>` : ''}</label>
+          <select class="pickSel" onchange="setPick('${c.id}', this.value)">
+            <option value="">— choose · اختر —</option>
+            ${c.items.map(m => `<option value="${m.id}" ${_selCat[c.id] === m.id ? 'selected' : ''}>${esc(m.name)}${m.name_ar ? ' · ' + esc(m.name_ar) : ''}</option>`).join('')}
+          </select>
+        </div>`).join('');
+      wrap.style.display = 'block';
+    }
+    function setPick(catId, itemId){
+      const cat = _cats.find(c => c.id === catId);
+      if (!cat) return;
+      _selCat[catId] = itemId || null;
+      if (cat.kind === 'COFFEE'){
+        _coffeeOrder = _coffeeOrder.filter(id => id !== catId && _selCat[id]);
+        if (itemId) _coffeeOrder.push(catId);
+        // more than 2 coffee categories picked → un-pick the oldest one
+        while (_coffeeOrder.length > LIMITS.COFFEE){ _selCat[_coffeeOrder.shift()] = null; }
+      } else if (itemId){
+        // only 1 sweet category may be picked — un-pick any other sweet
+        _cats.filter(c2 => c2.kind === 'SWEET' && c2.id !== catId).forEach(c2 => { _selCat[c2.id] = null; });
+      }
       renderPicker();
     }
 
@@ -179,14 +185,14 @@
       if (!phone){ err('Please enter your phone number · أدخل رقم جوالك'); $('phone').focus(); return; }
       if (!sb){ err('This page isn’t configured yet.'); return; }
       // Require a full pick — as many as the menu can satisfy (2 coffees, 1 sweet).
-      const needC = Math.min(LIMITS.COFFEE, _menuItems.filter(m => m.category === 'COFFEE').length);
-      const needS = Math.min(LIMITS.SWEET,  _menuItems.filter(m => m.category === 'SWEET').length);
-      if (_sel.COFFEE.length < needC || _sel.SWEET.length < needS){
+      const needC = Math.min(LIMITS.COFFEE, _cats.filter(c => c.kind === 'COFFEE').length);
+      const needS = Math.min(LIMITS.SWEET,  _cats.filter(c => c.kind === 'SWEET').length);
+      if (kindCount('COFFEE') < needC || kindCount('SWEET') < needS){
         err('Please choose 2 coffees & 1 sweet · فضلًا اختر قهوتين وحلى واحد'); return;
       }
       setBusy(true);
       try {
-        const picks = [..._sel.COFFEE, ..._sel.SWEET];
+        const picks = Object.values(_selCat).filter(Boolean);
         let { data, error } = await sb.rpc('blogger_checkin', { p_phone: phone, p_name: name, p_branch: BRANCH, p_picks: picks.length ? picks : null });
         if (error && error.code === 'PGRST202'){
           // DB still has an older function (picks SQL not run yet) — degrade
@@ -218,7 +224,7 @@
     const mi = it => `
       <div class="mi">
         <div class="n">${esc(it.name)}${it.name_ar ? ` <span dir="rtl">· ${esc(it.name_ar)}</span>` : ''}</div>
-        ${it.note ? `<div class="d">${esc(it.note)}</div>` : ''}
+        ${it.category ? `<div class="d">${esc(it.category)}</div>` : (it.note ? `<div class="d">${esc(it.note)}</div>` : '')}
       </div>`;
     function showResult(data){
       const box = $('menu');
@@ -246,7 +252,7 @@
     function reset(){
       $('ok').classList.remove('show');
       $('menu').classList.remove('show'); $('menuItems').innerHTML=''; $('menuFoot').style.display='none';
-      _sel = { COFFEE: [], SWEET: [] }; renderPicker();
+      _selCat = {}; _coffeeOrder = []; renderPicker();
       $('name').value=''; $('phone').value=''; clearMsg(); $('name').focus();
     }
     $('phone').addEventListener('keydown', e=>{ if(e.key==='Enter') checkin(); });
