@@ -167,7 +167,7 @@
           </select>
         </div>`;
       wrap.innerHTML =
-        (hasCoffee ? sel('c1', 'Coffee 1', 'القهوة الأولى', 'COFFEE') + sel('c2', 'Coffee 2', 'القهوة الثانية', 'COFFEE') : '') +
+        (hasCoffee ? sel('c1', 'Coffee 1', 'القهوة الأولى', 'COFFEE') + sel('c2', 'Coffee 2 — optional', 'القهوة الثانية — اختياري', 'COFFEE') : '') +
         (hasSweet  ? sel('sw', 'Sweet', 'الحلى', 'SWEET') : '');
       wrap.style.display = 'block';
     }
@@ -178,11 +178,11 @@
       const phone = $('phone').value.trim();
       if (!phone){ err('Please enter your phone number · أدخل رقم جوالك'); $('phone').focus(); return; }
       if (!sb){ err('This page isn’t configured yet.'); return; }
-      // Require a full pick: both coffees + the sweet (when the menu has them).
+      // Require at least 1 coffee (2nd is optional) + the sweet (when the menu has them).
       const hasCoffee = _cats.some(c => c.kind === 'COFFEE');
       const hasSweet  = _cats.some(c => c.kind === 'SWEET');
-      if ((hasCoffee && (!_slots.c1 || !_slots.c2)) || (hasSweet && !_slots.sw)){
-        err('Please choose 2 coffees & 1 sweet · فضلًا اختر قهوتين وحلى واحد'); return;
+      if ((hasCoffee && !_slots.c1 && !_slots.c2) || (hasSweet && !_slots.sw)){
+        err('Please choose at least 1 coffee & 1 sweet · فضلًا اختر قهوة واحدة على الأقل وحلى'); return;
       }
       setBusy(true);
       try {
