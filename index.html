@@ -130,10 +130,9 @@
     function err(t){ const m=$('msg'); m.className='msg err'; m.textContent=t; }
     function clearMsg(){ const m=$('msg'); m.className='msg'; m.textContent=''; }
 
-    // ---- Menu picker: one dropdown per category; the campaign rule is
-    // "pick from 2 different coffee categories + 1 sweet". ----
-    let _cats = [], _selCat = {}, _coffeeOrder = [];
-    const LIMITS = { COFFEE: 2, SWEET: 1 };
+    // ---- Menu picker: Coffee 1 + Coffee 2 + Sweet dropdowns. Both coffees
+    // can come from the same category (categories are the optgroup headings).
+    let _cats = [], _slots = { c1: '', c2: '', sw: '' };
     async function loadMenu(){
       if (!sb) return;
       const { data, error } = await sb.rpc('blogger_menu_public');
@@ -141,41 +140,29 @@
       _cats = data.filter(c => Array.isArray(c.items) && c.items.length);
       renderPicker();
     }
-    function kindCount(kind){
-      return _cats.filter(c => c.kind === kind && _selCat[c.id]).length;
+    function optgroups(kind, slot){
+      return _cats.filter(c => c.kind === kind).map(c => `
+        <optgroup label="${esc(c.name)}${c.name_ar ? ' · ' + esc(c.name_ar) : ''}">
+          ${c.items.map(m => `<option value="${m.id}" ${_slots[slot] === m.id ? 'selected' : ''}>${esc(m.name)}${m.name_ar ? ' · ' + esc(m.name_ar) : ''}</option>`).join('')}
+        </optgroup>`).join('');
     }
     function renderPicker(){
       const wrap = $('pickWrap');
-      if (!_cats.length){ wrap.style.display = 'none'; return; }
-      const coffeeN = Math.min(LIMITS.COFFEE, _cats.filter(c => c.kind === 'COFFEE').length);
-      const head = coffeeN
-        ? `<label style="margin-bottom:10px">Pick ${coffeeN === 2 ? '2 coffees' : '1 coffee'} & 1 sweet
-             <span style="float:inline-end;color:#a99f95" dir="rtl">${coffeeN === 2 ? 'اختر قهوتين وحلى واحد' : 'اختر قهوة وحلى'}</span></label>`
-        : '';
-      wrap.innerHTML = head + _cats.map(c => `
+      const hasCoffee = _cats.some(c => c.kind === 'COFFEE');
+      const hasSweet  = _cats.some(c => c.kind === 'SWEET');
+      if (!hasCoffee && !hasSweet){ wrap.style.display = 'none'; return; }
+      const sel = (slot, en, ar, kind) => `
         <div class="field">
-          <label>${esc(c.name)}${c.name_ar ? ` <span style="float:inline-end;color:#a99f95" dir="rtl">${esc(c.name_ar)}</span>` : ''}</label>
-          <select class="pickSel" onchange="setPick('${c.id}', this.value)">
+          <label>${en} <span style="float:inline-end;color:#a99f95" dir="rtl">${ar}</span></label>
+          <select class="pickSel" onchange="_slots.${slot}=this.value">
             <option value="">— choose · اختر —</option>
-            ${c.items.map(m => `<option value="${m.id}" ${_selCat[c.id] === m.id ? 'selected' : ''}>${esc(m.name)}${m.name_ar ? ' · ' + esc(m.name_ar) : ''}</option>`).join('')}
+            ${optgroups(kind, slot)}
           </select>
-        </div>`).join('');
+        </div>`;
+      wrap.innerHTML =
+        (hasCoffee ? sel('c1', 'Coffee 1', 'القهوة الأولى', 'COFFEE') + sel('c2', 'Coffee 2', 'القهوة الثانية', 'COFFEE') : '') +
+        (hasSweet  ? sel('sw', 'Sweet', 'الحلى', 'SWEET') : '');
       wrap.style.display = 'block';
-    }
-    function setPick(catId, itemId){
-      const cat = _cats.find(c => c.id === catId);
-      if (!cat) return;
-      _selCat[catId] = itemId || null;
-      if (cat.kind === 'COFFEE'){
-        _coffeeOrder = _coffeeOrder.filter(id => id !== catId && _selCat[id]);
-        if (itemId) _coffeeOrder.push(catId);
-        // more than 2 coffee categories picked → un-pick the oldest one
-        while (_coffeeOrder.length > LIMITS.COFFEE){ _selCat[_coffeeOrder.shift()] = null; }
-      } else if (itemId){
-        // only 1 sweet category may be picked — un-pick any other sweet
-        _cats.filter(c2 => c2.kind === 'SWEET' && c2.id !== catId).forEach(c2 => { _selCat[c2.id] = null; });
-      }
-      renderPicker();
     }
 
     async function checkin(){
@@ -184,15 +171,15 @@
       const phone = $('phone').value.trim();
       if (!phone){ err('Please enter your phone number · أدخل رقم جوالك'); $('phone').focus(); return; }
       if (!sb){ err('This page isn’t configured yet.'); return; }
-      // Require a full pick — as many as the menu can satisfy (2 coffees, 1 sweet).
-      const needC = Math.min(LIMITS.COFFEE, _cats.filter(c => c.kind === 'COFFEE').length);
-      const needS = Math.min(LIMITS.SWEET,  _cats.filter(c => c.kind === 'SWEET').length);
-      if (kindCount('COFFEE') < needC || kindCount('SWEET') < needS){
+      // Require a full pick: both coffees + the sweet (when the menu has them).
+      const hasCoffee = _cats.some(c => c.kind === 'COFFEE');
+      const hasSweet  = _cats.some(c => c.kind === 'SWEET');
+      if ((hasCoffee && (!_slots.c1 || !_slots.c2)) || (hasSweet && !_slots.sw)){
         err('Please choose 2 coffees & 1 sweet · فضلًا اختر قهوتين وحلى واحد'); return;
       }
       setBusy(true);
       try {
-        const picks = Object.values(_selCat).filter(Boolean);
+        const picks = [_slots.c1, _slots.c2, _slots.sw].filter(Boolean);
         let { data, error } = await sb.rpc('blogger_checkin', { p_phone: phone, p_name: name, p_branch: BRANCH, p_picks: picks.length ? picks : null });
         if (error && error.code === 'PGRST202'){
           // DB still has an older function (picks SQL not run yet) — degrade
@@ -252,7 +239,7 @@
     function reset(){
       $('ok').classList.remove('show');
       $('menu').classList.remove('show'); $('menuItems').innerHTML=''; $('menuFoot').style.display='none';
-      _selCat = {}; _coffeeOrder = []; renderPicker();
+      _slots = { c1: '', c2: '', sw: '' }; renderPicker();
       $('name').value=''; $('phone').value=''; clearMsg(); $('name').focus();
     }
     $('phone').addEventListener('keydown', e=>{ if(e.key==='Enter') checkin(); });

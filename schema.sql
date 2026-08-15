@@ -121,34 +121,31 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'already',
       'name', v_row.name);
   end if;
-  -- Resolve the picked ids against the ACTIVE menu, server-side: at most one
-  -- item per category, max 2 COFFEE-kind + 1 SWEET-kind categories survive,
-  -- and names come from the tables — the client only ever sends ids, so it
-  -- can't invent items or inflate the consumption numbers.
+  -- Resolve the picked ids against the ACTIVE menu, server-side: max 2
+  -- COFFEE-kind + 1 SWEET-kind items survive — same category (or even the
+  -- same item twice) is allowed. Names come from the tables; the client only
+  -- ever sends ids, so it can't invent items or inflate consumption numbers.
   if p_picks is not null and jsonb_typeof(p_picks) = 'array' then
-    select jsonb_agg(jsonb_build_object('item_id', t.id, 'category', t.cname,
-                                        'name', t.name, 'name_ar', t.name_ar)
-                     order by t.kindrank, t.csort)
+    with req as (
+      select value as item_id, ordinality
+        from jsonb_array_elements_text(p_picks) with ordinality
+       limit 6
+    ), matched as (
+      select m.id, m.name, m.name_ar, c.name as cname, c.kind,
+             c.sort_order as csort, r.ordinality
+        from req r
+        join public.blogger_menu m on m.id::text = r.item_id and m.active
+        join public.blogger_menu_categories c on c.id = m.category_id and c.active
+    ), kept as (
+      (select * from matched where kind = 'COFFEE' order by ordinality limit 2)
+      union all
+      (select * from matched where kind = 'SWEET' order by ordinality limit 1)
+    )
+    select jsonb_agg(jsonb_build_object('item_id', id, 'category', cname,
+                                        'name', name, 'name_ar', name_ar)
+                     order by case kind when 'COFFEE' then 0 else 1 end, csort, ordinality)
       into v_picks
-      from (
-        (select distinct on (m.category_id)
-                m.id, m.name, m.name_ar, c.name as cname, c.sort_order as csort, 0 as kindrank
-           from public.blogger_menu m
-           join public.blogger_menu_categories c on c.id = m.category_id
-          where m.active and c.active and c.kind = 'COFFEE'
-            and m.id::text in (select value from jsonb_array_elements_text(p_picks))
-          order by m.category_id, m.sort_order, m.created_at
-          limit 2)
-        union all
-        (select distinct on (m.category_id)
-                m.id, m.name, m.name_ar, c.name as cname, c.sort_order as csort, 1 as kindrank
-           from public.blogger_menu m
-           join public.blogger_menu_categories c on c.id = m.category_id
-          where m.active and c.active and c.kind = 'SWEET'
-            and m.id::text in (select value from jsonb_array_elements_text(p_picks))
-          order by m.category_id, m.sort_order, m.created_at
-          limit 1)
-      ) t;
+      from kept;
   end if;
   insert into public.blogger_checkins(phone, name, allowlist_id, branch, picks)
     values (v_norm, coalesce(nullif(trim(p_name), ''), v_row.name), v_row.id, v_branch, v_picks);
