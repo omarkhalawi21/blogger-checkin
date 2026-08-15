@@ -40,10 +40,12 @@ create table if not exists public.blogger_menu (
   name       text not null,
   name_ar    text,
   note       text,
+  category   text,             -- 'COFFEE' | 'SWEET' (null = uncategorized, shown last)
   sort_order int  not null default 0,
   active     boolean not null default true,
   created_at timestamptz not null default now()
 );
+alter table public.blogger_menu add column if not exists category text;
 
 -- 3. Phone normaliser: strip non-digits, keep the last 9 (so "0551234567",
 --    "+966551234567" and "551234567" all match the same blogger).
@@ -87,8 +89,11 @@ begin
   insert into public.blogger_checkins(phone, name, allowlist_id, branch)
     values (v_norm, coalesce(nullif(trim(p_name), ''), v_row.name), v_row.id, v_branch);
   -- The campaign menu, shown on the success screen (empty array if none).
-  select coalesce(jsonb_agg(jsonb_build_object('name', name, 'name_ar', name_ar, 'note', note)
-                            order by sort_order, created_at), '[]'::jsonb)
+  -- Coffee first, then Sweet, then anything uncategorized.
+  select coalesce(jsonb_agg(jsonb_build_object('name', name, 'name_ar', name_ar,
+                                               'note', note, 'category', category)
+                            order by case category when 'COFFEE' then 0 when 'SWEET' then 1 else 2 end,
+                                     sort_order, created_at), '[]'::jsonb)
     into v_items from public.blogger_menu where active;
   return jsonb_build_object('ok', true,
     'name', coalesce(v_row.name, nullif(trim(p_name), '')),

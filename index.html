@@ -52,6 +52,10 @@
       max-height:38vh; overflow:auto; box-shadow:0 14px 34px -26px rgba(60,40,20,.4); }
     .menu.show{ display:block; }
     .menu .mt{ font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--brand); font-weight:800; margin-bottom:8px; }
+    .menu .mc{ font-size:12px; font-weight:800; color:#6b625c; text-transform:uppercase; letter-spacing:.08em;
+      margin:10px 0 2px; padding-top:8px; border-top:1px solid #f3ede6; }
+    .menu .mc:first-of-type{ margin-top:2px; padding-top:0; border-top:none; }
+    .menu .mc span{ color:#a99f95; font-weight:700; }
     .mi{ padding:8px 0; border-bottom:1px solid #f3ede6; }
     .mi:last-child{ border-bottom:none; }
     .mi .n{ font-weight:700; font-size:15px; }
@@ -151,11 +155,20 @@
     function showMenu(items){
       const box = $('menu');
       if (!items.length){ box.classList.remove('show'); $('menuItems').innerHTML=''; return; }
-      $('menuItems').innerHTML = items.map(it => `
+      // Grouped under Coffee / Sweet headers; uncategorized items last, no header.
+      const mi = it => `
         <div class="mi">
           <div class="n">${esc(it.name)}${it.name_ar ? ` <span dir="rtl">· ${esc(it.name_ar)}</span>` : ''}</div>
           ${it.note ? `<div class="d">${esc(it.note)}</div>` : ''}
-        </div>`).join('');
+        </div>`;
+      const cats = [['COFFEE','Coffee','قهوة'], ['SWEET','Sweet','حلى'], ['OTHER','','']];
+      $('menuItems').innerHTML = cats.map(([key, en, ar]) => {
+        const list = items.filter(it => key==='OTHER'
+          ? (it.category!=='COFFEE' && it.category!=='SWEET')
+          : it.category===key);
+        if (!list.length) return '';
+        return (en ? `<div class="mc">${en} <span dir="rtl">· ${ar}</span></div>` : '') + list.map(mi).join('');
+      }).join('');
       box.classList.add('show');
     }
     function reset(){

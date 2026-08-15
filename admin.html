@@ -95,17 +95,21 @@
         <div class="card">
           <h2>Add menu item</h2>
           <div class="row">
+            <select id="miCat" style="font-size:15px;padding:11px 12px;border:1.5px solid var(--ring);border-radius:11px;background:#fdfcfa;color:var(--ink)">
+              <option value="COFFEE">Coffee · قهوة</option>
+              <option value="SWEET">Sweet · حلى</option>
+            </select>
             <input id="miName" placeholder="Item — e.g. V60 · Ethiopia" style="flex:2;min-width:170px">
             <input id="miAr" dir="rtl" placeholder="الاسم بالعربي (اختياري)" style="flex:1.4;min-width:140px">
             <input id="miNote" placeholder="Note (optional) — e.g. one per guest" style="flex:2;min-width:170px">
             <button onclick="addMenuItem()">Add</button>
           </div>
-          <div class="note">Shown to the blogger on the success screen right after they check in — "Available for you · متاح لك".</div>
+          <div class="note">Shown to the blogger on the success screen right after they check in — "Available for you · متاح لك" — grouped by category (Coffee first, then Sweet).</div>
         </div>
         <div class="card">
           <div class="between" style="margin-bottom:12px"><h2 style="margin:0">Menu · <span id="menuCount">0</span></h2></div>
           <div style="overflow-x:auto">
-            <table><thead><tr><th>Item</th><th>Arabic</th><th>Note</th><th>Status</th><th></th></tr></thead>
+            <table><thead><tr><th>Category</th><th>Item</th><th>Arabic</th><th>Note</th><th>Status</th><th></th></tr></thead>
               <tbody id="menuBody"></tbody></table>
           </div>
         </div>
@@ -180,10 +184,19 @@
       }
       _menu = data||[]; renderMenu();
     }
+    const catRank = c => c==='COFFEE' ? 0 : c==='SWEET' ? 1 : 2;
     function renderMenu(){
       $('menuCount').textContent = _menu.length;
-      $('menuBody').innerHTML = _menu.length ? _menu.map(m=>`
+      const rows = [..._menu].sort((a,b)=> catRank(a.category)-catRank(b.category));
+      $('menuBody').innerHTML = rows.length ? rows.map(m=>`
         <tr>
+          <td>
+            <select onchange="setMenuCat('${m.id}',this.value)" style="font-size:13px;padding:6px 8px;border:1.5px solid var(--ring);border-radius:9px;background:#fdfcfa;color:var(--ink)">
+              <option value="COFFEE" ${m.category==='COFFEE'?'selected':''}>Coffee</option>
+              <option value="SWEET" ${m.category==='SWEET'?'selected':''}>Sweet</option>
+              ${m.category!=='COFFEE'&&m.category!=='SWEET' ? '<option value="" selected>—</option>' : ''}
+            </select>
+          </td>
           <td>${esc(m.name)}</td>
           <td dir="rtl">${esc(m.name_ar)||'<span class="muted">—</span>'}</td>
           <td class="muted">${esc(m.note)||'—'}</td>
@@ -192,13 +205,18 @@
             <button class="ghost sm" onclick="toggleMenuItem('${m.id}',${m.active})">${m.active?'Hide':'Show'}</button>
             <button class="ghost sm" onclick="removeMenuItem('${m.id}')">Delete</button>
           </td>
-        </tr>`).join('') : `<tr><td colspan="5" class="muted" style="text-align:center;padding:22px">No menu items yet.</td></tr>`;
+        </tr>`).join('') : `<tr><td colspan="6" class="muted" style="text-align:center;padding:22px">No menu items yet.</td></tr>`;
+    }
+    async function setMenuCat(id,val){
+      const { error } = await sb.from('blogger_menu').update({ category: val||null }).eq('id',id);
+      if (error){ toast(/column/i.test(error.message)?'Run the category SQL first':error.message); return; }
+      loadMenu();
     }
     async function addMenuItem(){
       const name=$('miName').value.trim();
       if (!name){ toast('Item name is required'); return; }
-      const { error } = await sb.from('blogger_menu').insert({ name, name_ar:$('miAr').value.trim()||null, note:$('miNote').value.trim()||null });
-      if (error){ toast(/does not exist/i.test(error.message)?'Run the menu SQL first':error.message); return; }
+      const { error } = await sb.from('blogger_menu').insert({ name, category:$('miCat').value, name_ar:$('miAr').value.trim()||null, note:$('miNote').value.trim()||null });
+      if (error){ toast(/does not exist|column/i.test(error.message)?'Run the menu SQL first':error.message); return; }
       $('miName').value=''; $('miAr').value=''; $('miNote').value='';
       toast('Menu item added'); loadMenu();
     }
