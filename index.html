@@ -110,7 +110,6 @@
       <div class="meta" id="menuMeta"></div>
     </div>
     <div class="cashier" id="menuFoot" style="display:none">🧾 Please show this screen to the cashier<br><span dir="rtl">فضلًا أرِ هذه الشاشة للكاشير</span></div>
-    <button onclick="reset()">Done · تم</button>
   </section>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -254,12 +253,6 @@
       } else { box.classList.remove('show'); $('menuItems').innerHTML=''; $('menuMeta').textContent=''; $('menuFoot').style.display='none'; return; }
       $('menuFoot').style.display = 'block';
       box.classList.add('show');
-    }
-    function reset(){
-      $('ok').classList.remove('show');
-      $('menu').classList.remove('show'); $('menuItems').innerHTML=''; $('menuMeta').textContent=''; $('menuFoot').style.display='none';
-      _slots = { c1: '', c2: '', sw: '' }; renderPicker();
-      $('name').value=''; $('phone').value=''; clearMsg(); $('name').focus();
     }
     $('phone').addEventListener('keydown', e=>{ if(e.key==='Enter') checkin(); });
     loadMenu();
