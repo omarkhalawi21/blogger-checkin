@@ -153,7 +153,7 @@
             </div>
           </div>
           <div style="overflow-x:auto">
-            <table><thead><tr><th>When</th><th>Username</th><th>Phone</th><th>Branch</th><th>Picked</th></tr></thead>
+            <table><thead><tr><th>When</th><th>Username</th><th>Phone</th><th>Branch</th><th>Picked</th><th></th></tr></thead>
               <tbody id="ciBody"></tbody></table>
           </div>
         </div>
@@ -355,8 +355,9 @@
       $('cToday').textContent = rows.filter(c=>(c.created_at||'').slice(0,10)===today).length;
       $('cUnique').textContent = new Set(rows.map(c=>c.phone)).size;
       $('ciBody').innerHTML = rows.length ? rows.map(c=>`
-        <tr><td class="muted mono">${fmt(c.created_at)}</td><td>${esc(c.name)||'<span class="muted">—</span>'}</td><td class="mono">${esc(c.phone)}</td><td>${esc(c.branch)||'<span class="muted">—</span>'}</td><td class="muted">${esc(picksText(c))||'—'}</td></tr>
-      `).join('') : `<tr><td colspan="5" class="muted" style="text-align:center;padding:22px">No check-ins yet.</td></tr>`;
+        <tr><td class="muted mono">${fmt(c.created_at)}</td><td>${esc(c.name)||'<span class="muted">—</span>'}</td><td class="mono">${esc(c.phone)}</td><td>${esc(c.branch)||'<span class="muted">—</span>'}</td><td class="muted">${esc(picksText(c))||'—'}</td>
+          <td style="text-align:right"><button class="ghost sm" onclick="removeCheckin('${c.id}')">Delete</button></td></tr>
+      `).join('') : `<tr><td colspan="6" class="muted" style="text-align:center;padding:22px">No check-ins yet.</td></tr>`;
       // Consumption totals — how many of each item were picked (branch-filtered).
       const counts = {};
       rows.forEach(c => (Array.isArray(c.picks)?c.picks:[]).forEach(p => {
@@ -370,6 +371,12 @@
       }).join('') : `<tr><td colspan="3" class="muted" style="text-align:center;padding:22px">No picks recorded yet.</td></tr>`;
     }
     function picksText(c){ return Array.isArray(c.picks) ? c.picks.map(p=>p.name).filter(Boolean).join(' + ') : ''; }
+    async function removeCheckin(id){
+      if (!confirm('Delete this check-in? The number will be able to check in again.')) return;
+      const { error } = await sb.from('blogger_checkins').delete().eq('id', id);
+      if (error){ toast(error.message); return; }
+      toast('Check-in deleted'); loadCheckins();
+    }
     function exportCsv(){
       const b=$('ciBranch').value;
       const list=_checkins.filter(c=> !b || c.branch===b);
